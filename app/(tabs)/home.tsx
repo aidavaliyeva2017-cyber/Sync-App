@@ -224,25 +224,13 @@ export default function HomeScreen() {
             >
               <Feather name="bell" size={16} color={Colors.text.icon} />
             </TouchableOpacity>
-            <View>
-              <TouchableOpacity
-                style={styles.iconBtn}
-                onPress={() => setMenuVisible((v) => !v)}
-                activeOpacity={0.7}
-              >
-                <Feather name="more-vertical" size={16} color={Colors.text.icon} />
-              </TouchableOpacity>
-              {menuVisible && (
-                <TouchableOpacity
-                  style={styles.dropdown}
-                  onPress={() => { setMenuVisible(false); router.push('/settings'); }}
-                  activeOpacity={0.8}
-                >
-                  <Feather name="settings" size={14} color={Colors.text.body} style={{ marginRight: 8 }} />
-                  <Text style={styles.dropdownText}>Settings</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+            <TouchableOpacity
+              style={styles.iconBtn}
+              onPress={() => setMenuVisible((v) => !v)}
+              activeOpacity={0.7}
+            >
+              <Feather name="more-vertical" size={16} color={Colors.text.icon} />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -346,13 +334,25 @@ export default function HomeScreen() {
         </GlassCard>
       </ScrollView>
 
-      {/* Backdrop dismiss for dropdown */}
+      {/* Backdrop dismiss for dropdown — renders below the dropdown itself */}
       {menuVisible && (
         <TouchableOpacity
           style={StyleSheet.absoluteFill}
           onPress={() => setMenuVisible(false)}
           activeOpacity={0}
         />
+      )}
+
+      {/* Floating dropdown — rendered after backdrop so it sits on top */}
+      {menuVisible && (
+        <TouchableOpacity
+          style={[styles.dropdown, { top: insets.top + 54, right: 14 }]}
+          onPress={() => { setMenuVisible(false); router.push('/settings'); }}
+          activeOpacity={0.8}
+        >
+          <Feather name="settings" size={14} color={Colors.text.body} style={{ marginRight: 8 }} />
+          <Text style={styles.dropdownText}>Settings</Text>
+        </TouchableOpacity>
       )}
 
       {/* Connection modal */}
@@ -409,8 +409,6 @@ const styles = StyleSheet.create({
   },
   dropdown: {
     position: 'absolute',
-    top: 36,
-    right: 0,
     backgroundColor: Colors.background.surface,
     borderRadius: 12,
     borderWidth: 0.5,
@@ -419,8 +417,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    zIndex: 100,
+    zIndex: 200,
     minWidth: 130,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
   },
   dropdownText: { fontSize: 14, color: Colors.text.body },
   banner: {
