@@ -6,19 +6,24 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
-  ActivityIndicator,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
-import { getPendingRequestCount, getConnectionStatus } from '../../lib/connections';
+import { getPendingRequestCount } from '../../lib/connections';
+import { generateMatch } from '../../lib/matching';
 import { useAuthStore } from '../../stores/authStore';
+import { useProfileStore } from '../../stores/profileStore';
+import { useNotificationStore } from '../../stores/notificationStore';
 import { ScreenBackground } from '../../components/ScreenBackground';
 import { Avatar } from '../../components/ui/Avatar';
 import { Tag } from '../../components/ui/Tag';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { ConnectionModal } from '../../components/ConnectionModal';
+import { Toast } from '../../components/ui/Toast';
+import { NetworkBanner } from '../../components/ui/NetworkBanner';
+import { SkeletonMatchCard, SkeletonChatRow } from '../../components/ui/Skeleton';
 import { Colors } from '../../constants/colors';
 import { Typography } from '../../constants/typography';
 import type { Profile } from '../../types/database';
@@ -48,138 +53,167 @@ export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
+  const { profile } = useProfileStore();
+  const { unreadCount: notifUnread, setUnreadCount: setNotifUnread } = useNotificationStore();
 
   const [matchProfile, setMatchProfile] = useState<Profile | null>(null);
+  const [matchReason, setMatchReason] = useState('');
   const [matchConnStatus, setMatchConnStatus] = useState<'none' | 'request_sent'>('none');
   const [pendingCount, setPendingCount] = useState(0);
   const [chats, setChats] = useState<ChatPreview[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [toast, setToast] = useState('');
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMsg, setToastMsg] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
   const [modalVisible, setModalVisible] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [networkError, setNetworkError] = useState(false);
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(''), 3000);
+  const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToastMsg(msg);
+    setToastType(type);
+    setToastVisible(true);
   };
 
   const fetchData = useCallback(async () => {
     if (!user?.id) return;
+    setNetworkError(false);
 
-    // Parallel fetches
-    const [pendingCnt, connectionsRes, requestsRes, incomingRes] = await Promise.all([
-      getPendingRequestCount(user.id),
-      supabase
-        .from('connections')
-        .select('id, user_a, user_b, created_at')
-        .or(`user_a.eq.${user.id},user_b.eq.${user.id}`)
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('connection_requests')
-        .select('receiver_id')
-        .eq('sender_id', user.id)
-        .eq('status', 'pending'),
-      supabase
-        .from('connection_requests')
-        .select('sender_id')
-        .eq('receiver_id', user.id)
-        .eq('status', 'pending'),
-    ]);
-
-    setPendingCount(pendingCnt);
-
-    const sentToIds = new Set((requestsRes.data ?? []).map((r) => r.receiver_id));
-    const receivedFromIds = new Set((incomingRes.data ?? []).map((r) => r.sender_id));
-    const connectedIds = new Set<string>();
-    const connectionIds = (connectionsRes.data ?? []).map((c) => {
-      const otherId = c.user_a === user.id ? c.user_b : c.user_a;
-      connectedIds.add(otherId);
-      return { connectionId: c.id, otherId };
-    });
-
-    // Fetch match: pick a random profile not connected, not pending
-    const { data: candidates } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('onboarding_complete', true)
-      .neq('id', user.id)
-      .limit(50);
-
-    const eligible = (candidates ?? []).filter(
-      (p) => !connectedIds.has(p.id) && !sentToIds.has(p.id) && !receivedFromIds.has(p.id)
-    );
-
-    if (eligible.length > 0) {
-      const pick = eligible[Math.floor(Math.random() * eligible.length)];
-      setMatchProfile(pick);
-      // Defensive check: verify actual status in case of any race condition
-      const actualStatus = await getConnectionStatus(user.id, pick.id);
-      setMatchConnStatus(actualStatus === 'request_sent' ? 'request_sent' : 'none');
-    } else {
-      setMatchProfile(null);
-    }
-
-    // Fetch chat previews (up to 3 most recent connections)
-    if (connectionIds.length > 0) {
-      const top3 = connectionIds.slice(0, 3);
-      const otherIds = top3.map((c) => c.otherId);
-
-      const [profilesRes, messagesRes, readRes] = await Promise.all([
-        supabase.from('profiles').select('*').in('id', otherIds),
+    try {
+      const [pendingCnt, connectionsRes, requestsRes, incomingRes] = await Promise.all([
+        getPendingRequestCount(user.id),
         supabase
-          .from('messages')
-          .select('connection_id, content, created_at, sender_id')
-          .in('connection_id', top3.map((c) => c.connectionId))
+          .from('connections')
+          .select('id, user_a, user_b, created_at')
+          .or(`user_a.eq.${user.id},user_b.eq.${user.id}`)
           .order('created_at', { ascending: false }),
         supabase
-          .from('message_read_status')
-          .select('connection_id, last_read_at')
-          .in('connection_id', top3.map((c) => c.connectionId))
-          .eq('user_id', user.id),
+          .from('connection_requests')
+          .select('receiver_id')
+          .eq('sender_id', user.id)
+          .eq('status', 'pending'),
+        supabase
+          .from('connection_requests')
+          .select('sender_id')
+          .eq('receiver_id', user.id)
+          .eq('status', 'pending'),
       ]);
 
-      const profileMap: Record<string, Profile> = {};
-      (profilesRes.data ?? []).forEach((p) => { profileMap[p.id] = p; });
+      setPendingCount(pendingCnt);
 
-      const lastMsgMap: Record<string, { content: string; at: string; senderId: string }> = {};
-      (messagesRes.data ?? []).forEach((m) => {
-        if (!lastMsgMap[m.connection_id]) {
-          lastMsgMap[m.connection_id] = { content: m.content, at: m.created_at, senderId: m.sender_id };
-        }
+      const sentToIds = new Set((requestsRes.data ?? []).map((r) => r.receiver_id));
+      const receivedFromIds = new Set((incomingRes.data ?? []).map((r) => r.sender_id));
+      const connectedIds = new Set<string>();
+      const connectionIds = (connectionsRes.data ?? []).map((c) => {
+        const otherId = c.user_a === user.id ? c.user_b : c.user_a;
+        connectedIds.add(otherId);
+        return { connectionId: c.id, otherId };
       });
 
-      const readMap: Record<string, string> = {};
-      (readRes.data ?? []).forEach((r) => { readMap[r.connection_id] = r.last_read_at; });
+      // Smart match algorithm
+      if (profile) {
+        try {
+          const match = await generateMatch(user.id, profile);
+          if (match) {
+            // Verify the match isn't already connected/pending
+            const alreadyConn = connectedIds.has(match.profile.id);
+            const alreadySent = sentToIds.has(match.profile.id);
+            const alreadyReceived = receivedFromIds.has(match.profile.id);
+            if (!alreadyConn && !alreadySent && !alreadyReceived) {
+              setMatchProfile(match.profile);
+              setMatchReason(match.reason);
+              setMatchConnStatus('none');
+            } else if (alreadySent) {
+              setMatchProfile(match.profile);
+              setMatchReason(match.reason);
+              setMatchConnStatus('request_sent');
+            } else {
+              setMatchProfile(null);
+              setMatchReason('');
+            }
+          } else {
+            setMatchProfile(null);
+            setMatchReason('');
+          }
+        } catch (err) {
+          console.error('[home] match generation error:', err);
+          setMatchProfile(null);
+        }
+      }
 
-      const previews: ChatPreview[] = top3
-        .map(({ connectionId, otherId }) => {
-          const profile = profileMap[otherId];
-          if (!profile) return null;
-          const msg = lastMsgMap[connectionId];
-          const lastRead = readMap[connectionId];
-          const unread = !!msg && msg.senderId !== user.id &&
-            (!lastRead || new Date(msg.at) > new Date(lastRead));
-          return {
-            connectionId,
-            profile,
-            lastMessage: msg?.content ?? null,
-            lastMessageAt: msg?.at ?? null,
-            unread,
-          } as ChatPreview;
-        })
-        .filter(Boolean) as ChatPreview[];
+      // Fetch chat previews (up to 3 most recent connections)
+      if (connectionIds.length > 0) {
+        const top3 = connectionIds.slice(0, 3);
+        const otherIds = top3.map((c) => c.otherId);
 
-      setChats(previews);
-    } else {
-      setChats([]);
+        const [profilesRes, messagesRes, readRes] = await Promise.all([
+          supabase.from('profiles').select('*').in('id', otherIds),
+          supabase
+            .from('messages')
+            .select('connection_id, content, created_at, sender_id')
+            .in('connection_id', top3.map((c) => c.connectionId))
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('message_read_status')
+            .select('connection_id, last_read_at')
+            .in('connection_id', top3.map((c) => c.connectionId))
+            .eq('user_id', user.id),
+        ]);
+
+        const profileMap: Record<string, Profile> = {};
+        (profilesRes.data ?? []).forEach((p) => { profileMap[p.id] = p; });
+
+        const lastMsgMap: Record<string, { content: string; at: string; senderId: string }> = {};
+        (messagesRes.data ?? []).forEach((m) => {
+          if (!lastMsgMap[m.connection_id]) {
+            lastMsgMap[m.connection_id] = { content: m.content, at: m.created_at, senderId: m.sender_id };
+          }
+        });
+
+        const readMap: Record<string, string> = {};
+        (readRes.data ?? []).forEach((r) => { readMap[r.connection_id] = r.last_read_at; });
+
+        const previews: ChatPreview[] = top3
+          .map(({ connectionId, otherId }) => {
+            const p = profileMap[otherId];
+            if (!p) return null;
+            const msg = lastMsgMap[connectionId];
+            const lastRead = readMap[connectionId];
+            const unread =
+              !!msg &&
+              msg.senderId !== user.id &&
+              (!lastRead || new Date(msg.at) > new Date(lastRead));
+            return {
+              connectionId,
+              profile: p,
+              lastMessage: msg?.content ?? null,
+              lastMessageAt: msg?.at ?? null,
+              unread,
+            } as ChatPreview;
+          })
+          .filter(Boolean) as ChatPreview[];
+
+        setChats(previews);
+      } else {
+        setChats([]);
+      }
+      // Notification unread count for bell badge
+      const { count } = await supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('is_read', false);
+      setNotifUnread(count ?? 0);
+    } catch (err) {
+      console.error('[home] fetchData error:', err);
+      setNetworkError(true);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
+  }, [user?.id, profile]);
 
-    setLoading(false);
-    setRefreshing(false);
-  }, [user?.id]);
-
-  // Re-fetch on every focus so the pending banner updates after accepting/declining requests
   useFocusEffect(
     useCallback(() => {
       fetchData();
@@ -189,16 +223,6 @@ export default function HomeScreen() {
   const onRefresh = () => { setRefreshing(true); fetchData(); };
 
   const tabBarHeight = 54 + insets.bottom;
-
-  if (loading) {
-    return (
-      <ScreenBackground>
-        <View style={[styles.loadingWrap, { paddingTop: insets.top }]}>
-          <ActivityIndicator color={Colors.teal.main} />
-        </View>
-      </ScreenBackground>
-    );
-  }
 
   return (
     <ScreenBackground>
@@ -210,7 +234,11 @@ export default function HomeScreen() {
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.teal.main} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={Colors.teal.main}
+          />
         }
       >
         {/* Header */}
@@ -219,10 +247,17 @@ export default function HomeScreen() {
           <View style={styles.headerBtns}>
             <TouchableOpacity
               style={styles.iconBtn}
-              onPress={() => showToast('Notifications coming soon')}
+              onPress={() => router.push('/notifications')}
               activeOpacity={0.7}
             >
               <Feather name="bell" size={16} color={Colors.text.icon} />
+              {notifUnread > 0 && (
+                <View style={styles.bellBadge}>
+                  <Text style={styles.bellBadgeText}>
+                    {notifUnread > 9 ? '9+' : notifUnread}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.iconBtn}
@@ -238,62 +273,82 @@ export default function HomeScreen() {
         {pendingCount > 0 && (
           <TouchableOpacity
             style={styles.banner}
-            onPress={() => router.push({ pathname: '/(tabs)/chats', params: { tab: 'Requests' } })}
+            onPress={() =>
+              router.push({ pathname: '/(tabs)/chats', params: { tab: 'Requests' } })
+            }
             activeOpacity={0.8}
           >
             <Feather name="user-plus" size={16} color={Colors.rose.soft} />
             <Text style={styles.bannerText}>
               {pendingCount} pending {pendingCount === 1 ? 'request' : 'requests'}
             </Text>
-            <Feather name="chevron-right" size={14} color={Colors.rose.soft} style={{ marginLeft: 'auto' }} />
+            <Feather
+              name="chevron-right"
+              size={14}
+              color={Colors.rose.soft}
+              style={{ marginLeft: 'auto' }}
+            />
           </TouchableOpacity>
         )}
 
         {/* Today's match */}
         <GlassCard style={styles.card}>
           <Text style={styles.sectionLabel}>TODAY'S MATCH</Text>
-          {matchProfile ? (
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => router.push(`/profile/${matchProfile.id}`)}
-            >
-              <View style={styles.matchRow}>
-                <Avatar size={48} imageUrl={matchProfile.avatar_url} name={matchProfile.full_name} variant="teal" />
-                <View style={styles.matchInfo}>
-                  <Text style={styles.matchName}>{matchProfile.full_name}</Text>
-                  <Text style={styles.matchSub} numberOfLines={1}>
-                    {[matchProfile.major, matchProfile.city].filter(Boolean).join(' — ')}
-                  </Text>
+          {loading ? (
+            <SkeletonMatchCard />
+          ) : matchProfile ? (
+            <>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => router.push(`/profile/${matchProfile.id}`)}
+              >
+                <View style={styles.matchRow}>
+                  <Avatar
+                    size={48}
+                    imageUrl={matchProfile.avatar_url}
+                    name={matchProfile.full_name}
+                    variant="teal"
+                  />
+                  <View style={styles.matchInfo}>
+                    <Text style={styles.matchName}>{matchProfile.full_name}</Text>
+                    <Text style={styles.matchSub} numberOfLines={1}>
+                      {[matchProfile.major, matchProfile.city].filter(Boolean).join(' — ')}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-              {matchProfile.interests?.length > 0 && (
-                <View style={styles.tagsRow}>
-                  {matchProfile.interests.slice(0, 3).map((tag) => (
-                    <Tag key={tag} label={tag} />
-                  ))}
+                {matchProfile.interests?.length > 0 && (
+                  <View style={styles.tagsRow}>
+                    {matchProfile.interests.slice(0, 3).map((tag) => (
+                      <Tag key={tag} label={tag} />
+                    ))}
+                  </View>
+                )}
+                {matchReason ? (
+                  <Text style={styles.matchReason}>Why this match: {matchReason}</Text>
+                ) : null}
+              </TouchableOpacity>
+              {matchConnStatus === 'none' ? (
+                <TouchableOpacity
+                  style={styles.connectBtn}
+                  onPress={() => setModalVisible(true)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.connectBtnText}>Connect</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={[styles.connectBtn, styles.requestedBtn]}>
+                  <Text style={styles.requestedText}>Requested</Text>
                 </View>
               )}
-            </TouchableOpacity>
+            </>
           ) : (
             <View style={styles.emptyMatch}>
-              <Feather name="users" size={24} color={Colors.text.hint} />
-              <Text style={styles.emptyMatchText}>No new matches right now. Check back later!</Text>
-            </View>
-          )}
-          {matchProfile && (
-            matchConnStatus === 'none' ? (
-              <TouchableOpacity
-                style={styles.connectBtn}
-                onPress={() => setModalVisible(true)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.connectBtnText}>Connect</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={[styles.connectBtn, styles.requestedBtn]}>
-                <Text style={styles.requestedText}>Requested</Text>
+              <View style={styles.emptyMatchIconWrap}>
+                <Feather name="users" size={24} color={Colors.teal.main} />
               </View>
-            )
+              <Text style={styles.emptyMatchTitle}>No new matches right now</Text>
+              <Text style={styles.emptyMatchSub}>Check back tomorrow!</Text>
+            </View>
           )}
         </GlassCard>
 
@@ -302,11 +357,24 @@ export default function HomeScreen() {
           <Text style={[styles.sectionLabel, { paddingHorizontal: 14, paddingTop: 14 }]}>
             RECENT CHATS
           </Text>
-          {chats.length === 0 ? (
+          {loading ? (
+            <>
+              <SkeletonChatRow />
+              <View style={styles.chatRowBorder} />
+              <SkeletonChatRow />
+              <View style={styles.chatRowBorder} />
+              <SkeletonChatRow />
+            </>
+          ) : chats.length === 0 ? (
             <View style={styles.emptyChats}>
-              <Text style={styles.emptyChatsText}>No conversations yet.</Text>
-              <TouchableOpacity onPress={() => router.push('/(tabs)/discover')}>
-                <Text style={styles.emptyChatsLink}>Find someone to connect with</Text>
+              <Feather name="message-circle" size={22} color={Colors.text.hint} style={{ marginBottom: 8 }} />
+              <Text style={styles.emptyChatsText}>Start connecting to begin chatting</Text>
+              <TouchableOpacity
+                onPress={() => router.push('/(tabs)/discover')}
+                style={styles.discoverBtn}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.discoverBtnText}>Discover students</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -318,7 +386,12 @@ export default function HomeScreen() {
                 activeOpacity={0.7}
               >
                 <View style={styles.chatAvatarWrap}>
-                  <Avatar size={38} imageUrl={chat.profile.avatar_url} name={chat.profile.full_name} variant="teal" />
+                  <Avatar
+                    size={38}
+                    imageUrl={chat.profile.avatar_url}
+                    name={chat.profile.full_name}
+                    variant="teal"
+                  />
                   {chat.unread && <View style={styles.unreadDot} />}
                 </View>
                 <View style={styles.chatInfo}>
@@ -334,7 +407,7 @@ export default function HomeScreen() {
         </GlassCard>
       </ScrollView>
 
-      {/* Backdrop dismiss for dropdown — renders below the dropdown itself */}
+      {/* Backdrop dismiss for dropdown */}
       {menuVisible && (
         <TouchableOpacity
           style={StyleSheet.absoluteFill}
@@ -343,7 +416,7 @@ export default function HomeScreen() {
         />
       )}
 
-      {/* Floating dropdown — rendered after backdrop so it sits on top */}
+      {/* Floating dropdown */}
       {menuVisible && (
         <TouchableOpacity
           style={[styles.dropdown, { top: insets.top + 54, right: 14 }]}
@@ -366,16 +439,19 @@ export default function HomeScreen() {
           onSent={() => {
             setModalVisible(false);
             setMatchConnStatus('request_sent');
-            showToast(`Connection request sent to ${matchProfile.full_name}!`);
+            showToast(`Connection request sent to ${matchProfile.full_name}!`, 'success');
           }}
         />
       )}
 
-      {toast ? (
-        <View style={styles.toast} pointerEvents="none">
-          <Text style={styles.toastText}>{toast}</Text>
-        </View>
-      ) : null}
+      <NetworkBanner visible={networkError} onRetry={() => { setLoading(true); fetchData(); }} />
+
+      <Toast
+        visible={toastVisible}
+        message={toastMsg}
+        type={toastType}
+        onDismiss={() => setToastVisible(false)}
+      />
     </ScreenBackground>
   );
 }
@@ -383,7 +459,6 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   scroll: { paddingHorizontal: 14 },
-  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -451,19 +526,42 @@ const styles = StyleSheet.create({
   matchInfo: { flex: 1 },
   matchName: { fontSize: 15, fontWeight: '700', color: Colors.text.primary },
   matchSub: { fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
-  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 2 },
+  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  matchReason: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.4)',
+    marginTop: 6,
+    fontStyle: 'italic',
+  },
   connectBtn: {
     height: 36,
     backgroundColor: Colors.teal.main,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 4,
   },
   connectBtnText: { fontSize: 12, fontWeight: '500', color: '#FFFFFF' },
-  requestedBtn: { backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.15)' },
+  requestedBtn: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
   requestedText: { fontSize: 12, fontWeight: '500', color: 'rgba(255,255,255,0.4)' },
-  emptyMatch: { alignItems: 'center', gap: 8, paddingVertical: 12 },
-  emptyMatchText: { fontSize: 13, color: Colors.text.hint, textAlign: 'center' },
+  emptyMatch: { alignItems: 'center', paddingVertical: 16, gap: 6 },
+  emptyMatchIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(27,138,143,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+    borderWidth: 0.5,
+    borderColor: 'rgba(27,138,143,0.25)',
+  },
+  emptyMatchTitle: { fontSize: 14, fontWeight: '600', color: Colors.text.body },
+  emptyMatchSub: { fontSize: 12, color: Colors.text.hint },
   chatRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -491,19 +589,36 @@ const styles = StyleSheet.create({
   chatName: { fontSize: 13, fontWeight: '600', color: Colors.text.primary },
   chatPreview: { fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 },
   chatTime: { fontSize: 10, color: 'rgba(255,255,255,0.25)' },
-  emptyChats: { paddingHorizontal: 14, paddingVertical: 16, gap: 6 },
-  emptyChatsText: { fontSize: 13, color: Colors.text.hint },
-  emptyChatsLink: { fontSize: 13, color: Colors.teal.light },
-  toast: {
-    position: 'absolute',
-    bottom: 100,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(30,30,40,0.95)',
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 20,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+  emptyChats: {
+    paddingHorizontal: 14,
+    paddingVertical: 20,
+    alignItems: 'center',
+    gap: 6,
   },
-  toastText: { fontSize: 13, color: Colors.text.body, fontWeight: '500' },
+  emptyChatsText: { fontSize: 13, color: Colors.text.hint, textAlign: 'center' },
+  discoverBtn: {
+    marginTop: 4,
+    height: 34,
+    paddingHorizontal: 18,
+    backgroundColor: Colors.teal.main,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  discoverBtnText: { fontSize: 12, fontWeight: '500', color: '#FFFFFF' },
+  bellBadge: {
+    position: 'absolute',
+    top: -3,
+    right: -3,
+    minWidth: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: Colors.rose.main,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+    borderWidth: 1.5,
+    borderColor: Colors.background.base,
+  },
+  bellBadgeText: { fontSize: 8, fontWeight: '700', color: '#FFFFFF' },
 });

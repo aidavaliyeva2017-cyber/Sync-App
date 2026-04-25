@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
   RefreshControl,
   Alert,
 } from 'react-native';
@@ -20,6 +19,8 @@ import { ScreenBackground } from '../../components/ScreenBackground';
 import { RequestCard, type RequestCardData } from '../../components/RequestCard';
 import { ChatListItem } from '../../components/ChatListItem';
 import { Avatar } from '../../components/ui/Avatar';
+import { Toast } from '../../components/ui/Toast';
+import { SkeletonChatRow } from '../../components/ui/Skeleton';
 import { Colors } from '../../constants/colors';
 import { Typography } from '../../constants/typography';
 import type { Profile } from '../../types/database';
@@ -56,128 +57,141 @@ export default function ChatsScreen() {
   const [outgoing, setOutgoing] = useState<OutgoingRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [toast, setToast] = useState('');
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMsg, setToastMsg] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
   const channelRef = useRef<RealtimeChannel | null>(null);
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(''), 3000);
+  const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToastMsg(msg);
+    setToastType(type);
+    setToastVisible(true);
   };
 
   const fetchConversations = useCallback(async () => {
     if (!user?.id) return;
 
-    const { data: conns } = await supabase
-      .from('connections')
-      .select('id, user_a, user_b')
-      .or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
+    try {
+      const { data: conns } = await supabase
+        .from('connections')
+        .select('id, user_a, user_b')
+        .or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
 
-    if (!conns || conns.length === 0) {
-      setConversations([]);
-      return;
-    }
-
-    const connectionIds = conns.map((c: any) => c.id);
-    const otherUserMap: Record<string, string> = {};
-    conns.forEach((c: any) => {
-      otherUserMap[c.id] = c.user_a === user.id ? c.user_b : c.user_a;
-    });
-    const otherIds = Object.values(otherUserMap);
-
-    const [profilesRes, messagesRes, readRes] = await Promise.all([
-      supabase.from('profiles').select('*').in('id', otherIds),
-      supabase
-        .from('messages')
-        .select('connection_id, content, created_at, sender_id')
-        .in('connection_id', connectionIds)
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('message_read_status')
-        .select('connection_id, last_read_at')
-        .in('connection_id', connectionIds)
-        .eq('user_id', user.id),
-    ]);
-
-    const profileMap: Record<string, Profile> = {};
-    (profilesRes.data ?? []).forEach((p: any) => { profileMap[p.id] = p; });
-
-    const lastMsgMap: Record<string, { content: string; at: string; senderId: string }> = {};
-    (messagesRes.data ?? []).forEach((m: any) => {
-      if (!lastMsgMap[m.connection_id]) {
-        lastMsgMap[m.connection_id] = { content: m.content, at: m.created_at, senderId: m.sender_id };
+      if (!conns || conns.length === 0) {
+        setConversations([]);
+        return;
       }
-    });
 
-    const readMap: Record<string, string> = {};
-    (readRes.data ?? []).forEach((r: any) => { readMap[r.connection_id] = r.last_read_at; });
+      const connectionIds = conns.map((c: any) => c.id);
+      const otherUserMap: Record<string, string> = {};
+      conns.forEach((c: any) => {
+        otherUserMap[c.id] = c.user_a === user.id ? c.user_b : c.user_a;
+      });
+      const otherIds = Object.values(otherUserMap);
 
-    const previews: ChatPreview[] = conns
-      .map((c: any) => {
-        const otherId = otherUserMap[c.id];
-        const profile = profileMap[otherId];
-        if (!profile) return null;
-        const msg = lastMsgMap[c.id];
-        const lastRead = readMap[c.id];
-        const unread = !!msg && msg.senderId !== user.id &&
-          (!lastRead || new Date(msg.at) > new Date(lastRead));
-        return {
-          connectionId: c.id,
-          profile,
-          lastMessage: msg?.content ?? null,
-          lastMessageAt: msg?.at ?? null,
-          unread,
-        } as ChatPreview;
-      })
-      .filter(Boolean) as ChatPreview[];
+      const [profilesRes, messagesRes, readRes] = await Promise.all([
+        supabase.from('profiles').select('*').in('id', otherIds),
+        supabase
+          .from('messages')
+          .select('connection_id, content, created_at, sender_id')
+          .in('connection_id', connectionIds)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('message_read_status')
+          .select('connection_id, last_read_at')
+          .in('connection_id', connectionIds)
+          .eq('user_id', user.id),
+      ]);
 
-    previews.sort((a, b) => {
-      if (!a.lastMessageAt && !b.lastMessageAt) return 0;
-      if (!a.lastMessageAt) return 1;
-      if (!b.lastMessageAt) return -1;
-      return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
-    });
+      const profileMap: Record<string, Profile> = {};
+      (profilesRes.data ?? []).forEach((p: any) => { profileMap[p.id] = p; });
 
-    setConversations(previews);
+      const lastMsgMap: Record<string, { content: string; at: string; senderId: string }> = {};
+      (messagesRes.data ?? []).forEach((m: any) => {
+        if (!lastMsgMap[m.connection_id]) {
+          lastMsgMap[m.connection_id] = { content: m.content, at: m.created_at, senderId: m.sender_id };
+        }
+      });
+
+      const readMap: Record<string, string> = {};
+      (readRes.data ?? []).forEach((r: any) => { readMap[r.connection_id] = r.last_read_at; });
+
+      const previews: ChatPreview[] = conns
+        .map((c: any) => {
+          const otherId = otherUserMap[c.id];
+          const p = profileMap[otherId];
+          if (!p) return null;
+          const msg = lastMsgMap[c.id];
+          const lastRead = readMap[c.id];
+          const unread =
+            !!msg &&
+            msg.senderId !== user.id &&
+            (!lastRead || new Date(msg.at) > new Date(lastRead));
+          return {
+            connectionId: c.id,
+            profile: p,
+            lastMessage: msg?.content ?? null,
+            lastMessageAt: msg?.at ?? null,
+            unread,
+          } as ChatPreview;
+        })
+        .filter(Boolean) as ChatPreview[];
+
+      previews.sort((a, b) => {
+        if (!a.lastMessageAt && !b.lastMessageAt) return 0;
+        if (!a.lastMessageAt) return 1;
+        if (!b.lastMessageAt) return -1;
+        return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
+      });
+
+      setConversations(previews);
+    } catch (err) {
+      console.error('[chats] fetchConversations error:', err);
+    }
   }, [user?.id]);
 
   const fetchRequests = useCallback(async () => {
     if (!user?.id) return;
 
-    const [incomingRes, outgoingRes] = await Promise.all([
-      supabase
-        .from('connection_requests')
-        .select('id, sender_id, intro_note, profiles!connection_requests_sender_id_fkey(full_name, avatar_url, major)')
-        .eq('receiver_id', user.id)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('connection_requests')
-        .select('id, receiver_id, profiles!connection_requests_receiver_id_fkey(full_name, avatar_url, major)')
-        .eq('sender_id', user.id)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false }),
-    ]);
+    try {
+      const [incomingRes, outgoingRes] = await Promise.all([
+        supabase
+          .from('connection_requests')
+          .select('id, sender_id, intro_note, profiles!connection_requests_sender_id_fkey(full_name, avatar_url, major)')
+          .eq('receiver_id', user.id)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('connection_requests')
+          .select('id, receiver_id, profiles!connection_requests_receiver_id_fkey(full_name, avatar_url, major)')
+          .eq('sender_id', user.id)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false }),
+      ]);
 
-    setIncoming(
-      (incomingRes.data ?? []).map((row: any) => ({
-        id: row.id,
-        senderId: row.sender_id,
-        senderName: row.profiles?.full_name ?? 'Unknown',
-        senderAvatarUrl: row.profiles?.avatar_url ?? null,
-        senderMajor: row.profiles?.major ?? '',
-        introNote: row.intro_note,
-      }))
-    );
+      setIncoming(
+        (incomingRes.data ?? []).map((row: any) => ({
+          id: row.id,
+          senderId: row.sender_id,
+          senderName: row.profiles?.full_name ?? 'Unknown',
+          senderAvatarUrl: row.profiles?.avatar_url ?? null,
+          senderMajor: row.profiles?.major ?? '',
+          introNote: row.intro_note,
+        }))
+      );
 
-    setOutgoing(
-      (outgoingRes.data ?? []).map((row: any) => ({
-        id: row.id,
-        receiverId: row.receiver_id,
-        receiverName: row.profiles?.full_name ?? 'Unknown',
-        receiverAvatarUrl: row.profiles?.avatar_url ?? null,
-        receiverMajor: row.profiles?.major ?? '',
-      }))
-    );
+      setOutgoing(
+        (outgoingRes.data ?? []).map((row: any) => ({
+          id: row.id,
+          receiverId: row.receiver_id,
+          receiverName: row.profiles?.full_name ?? 'Unknown',
+          receiverAvatarUrl: row.profiles?.avatar_url ?? null,
+          receiverMajor: row.profiles?.major ?? '',
+        }))
+      );
+    } catch (err) {
+      console.error('[chats] fetchRequests error:', err);
+    }
   }, [user?.id]);
 
   const fetchAll = useCallback(async () => {
@@ -186,7 +200,6 @@ export default function ChatsScreen() {
     setRefreshing(false);
   }, [fetchConversations, fetchRequests]);
 
-  // Re-fetch every time this tab comes into focus (picks up new connections after accept)
   useFocusEffect(
     useCallback(() => {
       fetchAll();
@@ -228,21 +241,17 @@ export default function ChatsScreen() {
   }, [user?.id, conversations.length]);
 
   const handleCancelRequest = (req: OutgoingRequest) => {
-    Alert.alert(
-      `Cancel request to ${req.receiverName}?`,
-      '',
-      [
-        { text: 'Keep', style: 'cancel' },
-        {
-          text: 'Cancel request',
-          style: 'destructive',
-          onPress: async () => {
-            await supabase.from('connection_requests').delete().eq('id', req.id);
-            setOutgoing((prev) => prev.filter((r) => r.id !== req.id));
-          },
+    Alert.alert(`Cancel request to ${req.receiverName}?`, '', [
+      { text: 'Keep', style: 'cancel' },
+      {
+        text: 'Cancel request',
+        style: 'destructive',
+        onPress: async () => {
+          await supabase.from('connection_requests').delete().eq('id', req.id);
+          setOutgoing((prev) => prev.filter((r) => r.id !== req.id));
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const onRefresh = () => { setRefreshing(true); fetchAll(); };
@@ -316,18 +325,39 @@ export default function ChatsScreen() {
 
         {/* Tab content */}
         {loading ? (
-          <View style={styles.emptyWrap}>
-            <ActivityIndicator color={Colors.teal.main} />
-          </View>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <SkeletonChatRow />
+            <View style={styles.divider} />
+            <SkeletonChatRow />
+            <View style={styles.divider} />
+            <SkeletonChatRow />
+            <View style={styles.divider} />
+            <SkeletonChatRow />
+            <View style={styles.divider} />
+            <SkeletonChatRow />
+          </ScrollView>
         ) : activeTab === 'All' ? (
           filteredConversations.length === 0 ? (
             <View style={styles.emptyWrap}>
-              <Feather name="message-square" size={32} color={Colors.text.hint} />
+              <View style={styles.emptyIconWrap}>
+                <Feather name="message-circle" size={24} color={Colors.text.hint} />
+              </View>
               <Text style={styles.emptyText}>
-                {search ? 'No results found' : 'No chats yet'}
+                {search ? 'No results found' : 'No conversations yet'}
               </Text>
               {!search && (
-                <Text style={styles.emptySubtext}>Find students to connect with!</Text>
+                <>
+                  <Text style={styles.emptySubtext}>
+                    Connect with students to start chatting
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.discoverBtn}
+                    onPress={() => router.push('/(tabs)/discover')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.discoverBtnText}>Discover students</Text>
+                  </TouchableOpacity>
+                </>
               )}
             </View>
           ) : (
@@ -356,7 +386,9 @@ export default function ChatsScreen() {
         ) : activeTab === 'Unread' ? (
           unreadConversations.length === 0 ? (
             <View style={styles.emptyWrap}>
-              <Feather name="check-circle" size={32} color={Colors.text.hint} />
+              <View style={[styles.emptyIconWrap, { backgroundColor: 'rgba(27,138,143,0.1)' }]}>
+                <Feather name="check-circle" size={24} color={Colors.teal.main} />
+              </View>
               <Text style={styles.emptyText}>All caught up!</Text>
               <Text style={styles.emptySubtext}>No unread messages</Text>
             </View>
@@ -396,7 +428,8 @@ export default function ChatsScreen() {
             <Text style={styles.sectionLabel}>INCOMING</Text>
             {incoming.length === 0 ? (
               <View style={styles.sectionEmpty}>
-                <Text style={styles.sectionEmptyText}>No incoming requests</Text>
+                <Feather name="inbox" size={18} color={Colors.text.hint} style={{ marginBottom: 6 }} />
+                <Text style={styles.sectionEmptyText}>No pending requests</Text>
               </View>
             ) : (
               incoming.map((req) => (
@@ -405,8 +438,7 @@ export default function ChatsScreen() {
                   request={req}
                   onAccepted={(id, name) => {
                     setIncoming((prev) => prev.filter((r) => r.id !== id));
-                    showToast(`You and ${name} are now connected!`);
-                    // Refresh conversations then switch to All tab so the new chat is visible
+                    showToast(`You and ${name} are now connected!`, 'success');
                     fetchConversations().then(() => setActiveTab('All'));
                   }}
                   onDeclined={(id) => setIncoming((prev) => prev.filter((r) => r.id !== id))}
@@ -428,12 +460,7 @@ export default function ChatsScreen() {
                     onPress={() => router.push(`/profile/${req.receiverId}`)}
                     activeOpacity={0.7}
                   >
-                    <Avatar
-                      size={44}
-                      imageUrl={req.receiverAvatarUrl}
-                      name={req.receiverName}
-                      variant="teal"
-                    />
+                    <Avatar size={44} imageUrl={req.receiverAvatarUrl} name={req.receiverName} variant="teal" />
                     <View style={styles.outNameCol}>
                       <Text style={styles.outName}>{req.receiverName}</Text>
                       <Text style={styles.outMajor} numberOfLines={1}>{req.receiverMajor}</Text>
@@ -456,11 +483,12 @@ export default function ChatsScreen() {
         )}
       </View>
 
-      {toast ? (
-        <View style={styles.toast} pointerEvents="none">
-          <Text style={styles.toastText}>{toast}</Text>
-        </View>
-      ) : null}
+      <Toast
+        visible={toastVisible}
+        message={toastMsg}
+        type={toastType}
+        onDismiss={() => setToastVisible(false)}
+      />
     </ScreenBackground>
   );
 }
@@ -473,11 +501,7 @@ const styles = StyleSheet.create({
     color: Colors.text.primary,
     marginBottom: 4,
   },
-  subtitle: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.35)',
-    marginBottom: 14,
-  },
+  subtitle: { fontSize: 12, color: 'rgba(255,255,255,0.35)', marginBottom: 14 },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -490,12 +514,7 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 14,
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    color: '#FFFFFF',
-    padding: 0,
-  },
+  searchInput: { flex: 1, fontSize: 14, color: '#FFFFFF', padding: 0 },
   tabsRow: {
     flexDirection: 'row',
     backgroundColor: 'rgba(255,255,255,0.06)',
@@ -524,9 +543,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 4,
   },
-  unreadBadgeOnActive: {
-    backgroundColor: 'rgba(255,255,255,0.3)',
-  },
+  unreadBadgeOnActive: { backgroundColor: 'rgba(255,255,255,0.3)' },
   unreadBadgeText: { fontSize: 10, fontWeight: '700', color: '#FFFFFF' },
   badge: {
     backgroundColor: Colors.rose.main,
@@ -537,14 +554,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   badgeText: { fontSize: 10, fontWeight: '700', color: '#FFFFFF' },
-  divider: {
-    height: 0.5,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    marginHorizontal: 14,
+  divider: { height: 0.5, backgroundColor: 'rgba(255,255,255,0.06)', marginHorizontal: 14 },
+  emptyWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 32,
   },
-  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  emptyText: { fontSize: 15, fontWeight: '500', color: Colors.text.body },
-  emptySubtext: { fontSize: 13, color: Colors.text.hint, textAlign: 'center', paddingHorizontal: 32 },
+  emptyIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.10)',
+  },
+  emptyText: { fontSize: 15, fontWeight: '600', color: Colors.text.body, textAlign: 'center' },
+  emptySubtext: { fontSize: 13, color: Colors.text.hint, textAlign: 'center' },
+  discoverBtn: {
+    marginTop: 8,
+    height: 36,
+    paddingHorizontal: 20,
+    backgroundColor: Colors.teal.main,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  discoverBtnText: { fontSize: 12, fontWeight: '500', color: '#FFFFFF' },
   sectionLabel: {
     fontSize: 11,
     fontWeight: '500',
@@ -555,9 +595,10 @@ const styles = StyleSheet.create({
     paddingLeft: 2,
   },
   sectionEmpty: {
-    paddingVertical: 14,
+    paddingVertical: 16,
     paddingHorizontal: 2,
     marginBottom: 4,
+    alignItems: 'center',
   },
   sectionEmptyText: { fontSize: 13, color: Colors.text.hint },
   outCard: {
@@ -590,16 +631,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cancelText: { fontSize: 12, fontWeight: '500', color: Colors.error },
-  toast: {
-    position: 'absolute',
-    bottom: 100,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(30,30,40,0.95)',
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 20,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
-  toastText: { fontSize: 13, color: Colors.text.body, fontWeight: '500' },
 });

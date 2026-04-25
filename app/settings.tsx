@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
 import { useProfileStore } from '../stores/profileStore';
@@ -18,6 +19,12 @@ import { ScreenBackground } from '../components/ScreenBackground';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Colors } from '../constants/colors';
 import { Typography } from '../constants/typography';
+
+const PREF_KEYS = {
+  requests: '@sync/notif_connection_requests',
+  messages: '@sync/notif_messages',
+  matches: '@sync/notif_matches',
+} as const;
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -29,6 +36,32 @@ export default function SettingsScreen() {
   const [notifMessages, setNotifMessages] = useState(true);
   const [notifMatches, setNotifMatches] = useState(true);
   const [toast, setToast] = useState('');
+
+  // Load persisted prefs on mount
+  useEffect(() => {
+    Promise.all([
+      AsyncStorage.getItem(PREF_KEYS.requests),
+      AsyncStorage.getItem(PREF_KEYS.messages),
+      AsyncStorage.getItem(PREF_KEYS.matches),
+    ]).then(([req, msg, match]) => {
+      if (req !== null) setNotifRequests(req !== 'false');
+      if (msg !== null) setNotifMessages(msg !== 'false');
+      if (match !== null) setNotifMatches(match !== 'false');
+    });
+  }, []);
+
+  const setAndPersistRequests = (v: boolean) => {
+    setNotifRequests(v);
+    AsyncStorage.setItem(PREF_KEYS.requests, String(v));
+  };
+  const setAndPersistMessages = (v: boolean) => {
+    setNotifMessages(v);
+    AsyncStorage.setItem(PREF_KEYS.messages, String(v));
+  };
+  const setAndPersistMatches = (v: boolean) => {
+    setNotifMatches(v);
+    AsyncStorage.setItem(PREF_KEYS.matches, String(v));
+  };
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -81,9 +114,9 @@ export default function SettingsScreen() {
         <Text style={styles.sectionHeader}>NOTIFICATIONS</Text>
         <GlassCard style={{ padding: 0, overflow: 'hidden', marginBottom: 20 }}>
           {[
-            { label: 'Connection requests', value: notifRequests, setter: setNotifRequests },
-            { label: 'Messages', value: notifMessages, setter: setNotifMessages },
-            { label: 'Match suggestions', value: notifMatches, setter: setNotifMatches },
+            { label: 'Connection requests', value: notifRequests, setter: setAndPersistRequests },
+            { label: 'Messages', value: notifMessages, setter: setAndPersistMessages },
+            { label: 'Match suggestions', value: notifMatches, setter: setAndPersistMatches },
           ].map((row, i, arr) => (
             <View
               key={row.label}
@@ -105,8 +138,8 @@ export default function SettingsScreen() {
         <Text style={styles.sectionHeader}>ACCOUNT</Text>
         <GlassCard style={{ padding: 0, overflow: 'hidden', marginBottom: 20 }}>
           {[
-            { label: 'Change email', onPress: () => showToast('Coming soon') },
-            { label: 'Change password', onPress: () => showToast('Coming soon') },
+            { label: 'Change email', onPress: () => router.push('/change-email') },
+            { label: 'Change password', onPress: () => router.push('/change-password') },
           ].map((row, i, arr) => (
             <TouchableOpacity
               key={row.label}

@@ -13,6 +13,7 @@
       "resizeMode": "contain",
       "backgroundColor": "#0A0A0F"
     },
+    "backgroundColor": "#0A0A0F",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.sync.app"

@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Linking,
-  ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,12 +13,14 @@ import { Feather } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { acceptConnectionRequest, declineConnectionRequest } from '../../lib/connections';
 import { ConnectionModal } from '../../components/ConnectionModal';
+import { Toast } from '../../components/ui/Toast';
 import { useAuthStore } from '../../stores/authStore';
 import { ScreenBackground } from '../../components/ScreenBackground';
 import { Avatar } from '../../components/ui/Avatar';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Tag } from '../../components/ui/Tag';
 import { Button } from '../../components/ui/Button';
+import { SkeletonProfile, Skeleton } from '../../components/ui/Skeleton';
 import { Colors } from '../../constants/colors';
 import { Typography } from '../../constants/typography';
 import type { Profile } from '../../types/database';
@@ -35,13 +36,17 @@ export default function ProfileViewScreen() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [connStatus, setConnStatus] = useState<ConnStatus>('none');
   const [requestId, setRequestId] = useState<string | null>(null);
+  const [connectionId, setConnectionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
-  const [toast, setToast] = useState('');
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMsg, setToastMsg] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(''), 2500);
+  const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToastMsg(msg);
+    setToastType(type);
+    setToastVisible(true);
   };
 
   useEffect(() => {
@@ -51,19 +56,23 @@ export default function ProfileViewScreen() {
       supabase
         .from('connections')
         .select('id')
-        .or(`user_a.eq.${user.id},user_b.eq.${user.id}`)
-        .or(`user_a.eq.${id},user_b.eq.${id}`)
+        .or(
+          `and(user_a.eq.${user.id},user_b.eq.${id}),and(user_a.eq.${id},user_b.eq.${user.id})`
+        )
         .limit(1),
       supabase
         .from('connection_requests')
         .select('id, sender_id, status')
-        .or(`and(sender_id.eq.${user.id},receiver_id.eq.${id}),and(sender_id.eq.${id},receiver_id.eq.${user.id})`)
+        .or(
+          `and(sender_id.eq.${user.id},receiver_id.eq.${id}),and(sender_id.eq.${id},receiver_id.eq.${user.id})`
+        )
         .eq('status', 'pending')
         .limit(1),
     ]).then(([profileRes, connRes, reqRes]) => {
       if (profileRes.data) setProfile(profileRes.data);
       if (connRes.data && connRes.data.length > 0) {
         setConnStatus('connected');
+        setConnectionId(connRes.data[0].id);
       } else if (reqRes.data && reqRes.data.length > 0) {
         const req = reqRes.data[0];
         setConnStatus(req.sender_id === user.id ? 'pending_sent' : 'pending_received');
@@ -73,17 +82,7 @@ export default function ProfileViewScreen() {
     });
   }, [id, user?.id]);
 
-  if (loading) {
-    return (
-      <ScreenBackground>
-        <View style={[styles.loadingWrap, { paddingTop: insets.top }]}>
-          <ActivityIndicator color={Colors.teal.main} />
-        </View>
-      </ScreenBackground>
-    );
-  }
-
-  if (!profile) {
+  if (!loading && !profile) {
     return (
       <ScreenBackground>
         <View style={[styles.loadingWrap, { paddingTop: insets.top }]}>
@@ -116,163 +115,209 @@ export default function ProfileViewScreen() {
           <Feather name="chevron-left" size={24} color={Colors.text.primary} />
         </TouchableOpacity>
 
-        {/* Avatar + identity */}
-        <View style={styles.avatarSection}>
-          <Avatar
-            size={80}
-            imageUrl={profile.avatar_url}
-            name={profile.full_name}
-            variant="teal"
-            style={{ marginBottom: 14 }}
-          />
-          <View style={styles.nameRow}>
-            <Text style={styles.displayName}>{profile.full_name}</Text>
-            {profile.is_verified && (
-              <View style={styles.verifiedPill}>
-                <Feather name="check-circle" size={11} color={Colors.teal.bright} />
-                <Text style={styles.verifiedText}>Verified</Text>
-              </View>
-            )}
-          </View>
-          <Text style={styles.username}>@{profile.username}</Text>
-          {(profile.city || profile.country) && (
-            <View style={styles.locationRow}>
-              <Feather name="map-pin" size={11} color="rgba(255,255,255,0.45)" />
-              <Text style={styles.location}>
-                {[profile.city, profile.country].filter(Boolean).join(', ')}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Stats */}
-        <View style={styles.statsRow}>
-          {[
-            { label: 'Connections', value: '—' },
-            { label: 'Pending', value: '—' },
-            { label: 'Matches', value: '—' },
-          ].map((stat, i, arr) => (
-            <React.Fragment key={stat.label}>
-              <View style={styles.statCell}>
-                <Text style={styles.statNum}>{stat.value}</Text>
-                <Text style={styles.statLabel}>{stat.label}</Text>
-              </View>
-              {i < arr.length - 1 && <View style={styles.statDivider} />}
-            </React.Fragment>
-          ))}
-        </View>
-
-        {/* Interests */}
-        {profile.interests?.length > 0 && (
-          <GlassCard style={styles.card}>
-            <Text style={styles.sectionLabel}>INTERESTS</Text>
-            <View style={styles.tagsRow}>
-              {profile.interests.map((tag) => (
-                <Tag key={tag} label={tag} />
+        {loading ? (
+          <>
+            <SkeletonProfile />
+            <View style={{ height: 16 }} />
+            <View style={styles.statsRow}>
+              {[0, 1, 2].map((i) => (
+                <React.Fragment key={i}>
+                  <View style={styles.statCell}>
+                    <Skeleton width={36} height={18} borderRadius={9} />
+                    <View style={{ height: 4 }} />
+                    <Skeleton width={60} height={10} borderRadius={5} />
+                  </View>
+                  {i < 2 && <View style={styles.statDivider} />}
+                </React.Fragment>
               ))}
             </View>
-          </GlassCard>
-        )}
-
-        {/* Details */}
-        <GlassCard style={[styles.card, { padding: 0, overflow: 'hidden' }]}>
-          <Text style={[styles.sectionLabel, { paddingHorizontal: 14, paddingTop: 14 }]}>
-            DETAILS
-          </Text>
-          {[
-            { label: 'Major', value: profile.major },
-            { label: 'University', value: profile.university },
-            { label: 'Age', value: profile.age?.toString() },
-            { label: 'LinkedIn', value: profile.linkedin_url, isLink: true },
-          ].map((row, i, arr) => (
-            <View
-              key={row.label}
-              style={[styles.detailRow, i < arr.length - 1 && styles.detailRowBorder]}
-            >
-              <Text style={styles.detailLabel}>{row.label}</Text>
-              {row.value ? (
-                row.isLink ? (
-                  <TouchableOpacity onPress={() => Linking.openURL(row.value!)}>
-                    <Text style={styles.detailLink} numberOfLines={1}>{row.value}</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <Text style={styles.detailValue} numberOfLines={1}>{row.value}</Text>
-                )
-              ) : (
-                <Text style={styles.detailEmpty}>Not specified</Text>
+            <GlassCard style={styles.card}>
+              <Skeleton width={80} height={10} borderRadius={5} />
+              <View style={{ height: 8, flexDirection: 'row', gap: 6 }}>
+                <Skeleton width={60} height={22} borderRadius={11} />
+                <Skeleton width={50} height={22} borderRadius={11} />
+              </View>
+            </GlassCard>
+          </>
+        ) : (
+          <>
+            {/* Avatar + identity */}
+            <View style={styles.avatarSection}>
+              <Avatar
+                size={80}
+                imageUrl={profile!.avatar_url}
+                name={profile!.full_name}
+                variant="teal"
+                style={{ marginBottom: 14 }}
+              />
+              <View style={styles.nameRow}>
+                <Text style={styles.displayName}>{profile!.full_name}</Text>
+                {profile!.is_verified && (
+                  <View style={styles.verifiedPill}>
+                    <Feather name="check-circle" size={11} color={Colors.teal.bright} />
+                    <Text style={styles.verifiedText}>Verified</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.username}>@{profile!.username}</Text>
+              {(profile!.city || profile!.country) && (
+                <View style={styles.locationRow}>
+                  <Feather name="map-pin" size={11} color="rgba(255,255,255,0.45)" />
+                  <Text style={styles.location}>
+                    {[profile!.city, profile!.country].filter(Boolean).join(', ')}
+                  </Text>
+                </View>
               )}
             </View>
-          ))}
-        </GlassCard>
 
-        {/* Projects */}
-        {profile.projects && (
-          <GlassCard style={styles.card}>
-            <Text style={styles.sectionLabel}>CURRENT PROJECTS</Text>
-            <View style={styles.projectsInner}>
-              <Text style={styles.projectText}>{profile.projects}</Text>
+            {/* Stats */}
+            <View style={styles.statsRow}>
+              {[
+                { label: 'Major', value: profile!.major ?? '—' },
+                { label: 'University', value: profile!.university ? profile!.university.split(' ').slice(0, 2).join(' ') : '—' },
+                { label: 'Age', value: profile!.age?.toString() ?? '—' },
+              ].map((stat, i, arr) => (
+                <React.Fragment key={stat.label}>
+                  <View style={styles.statCell}>
+                    <Text style={styles.statNum} numberOfLines={1}>{stat.value}</Text>
+                    <Text style={styles.statLabel}>{stat.label}</Text>
+                  </View>
+                  {i < arr.length - 1 && <View style={styles.statDivider} />}
+                </React.Fragment>
+              ))}
             </View>
-          </GlassCard>
+
+            {/* Interests */}
+            {profile!.interests?.length > 0 && (
+              <GlassCard style={styles.card}>
+                <Text style={styles.sectionLabel}>INTERESTS</Text>
+                <View style={styles.tagsRow}>
+                  {profile!.interests.map((tag) => (
+                    <Tag key={tag} label={tag} />
+                  ))}
+                </View>
+              </GlassCard>
+            )}
+
+            {/* Details */}
+            <GlassCard style={[styles.card, { padding: 0, overflow: 'hidden' }]}>
+              <Text style={[styles.sectionLabel, { paddingHorizontal: 14, paddingTop: 14 }]}>
+                DETAILS
+              </Text>
+              {[
+                { label: 'Major', value: profile!.major },
+                { label: 'University', value: profile!.university },
+                { label: 'Age', value: profile!.age?.toString() },
+                { label: 'LinkedIn', value: profile!.linkedin_url, isLink: true },
+              ].map((row, i, arr) => (
+                <View
+                  key={row.label}
+                  style={[styles.detailRow, i < arr.length - 1 && styles.detailRowBorder]}
+                >
+                  <Text style={styles.detailLabel}>{row.label}</Text>
+                  {row.value ? (
+                    row.isLink ? (
+                      <TouchableOpacity onPress={() => Linking.openURL(row.value!)}>
+                        <Text style={styles.detailLink} numberOfLines={1}>{row.value}</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <Text style={styles.detailValue} numberOfLines={1}>{row.value}</Text>
+                    )
+                  ) : (
+                    <Text style={styles.detailEmpty}>Not specified</Text>
+                  )}
+                </View>
+              ))}
+            </GlassCard>
+
+            {/* Projects */}
+            <GlassCard style={styles.card}>
+              <Text style={styles.sectionLabel}>CURRENT PROJECTS</Text>
+              {profile!.projects ? (
+                <View style={styles.projectsInner}>
+                  <Text style={styles.projectText}>{profile!.projects}</Text>
+                </View>
+              ) : (
+                <Text style={styles.emptyHint}>No projects shared yet</Text>
+              )}
+            </GlassCard>
+          </>
         )}
       </ScrollView>
 
-      {/* Action button */}
-      <View style={[styles.actionBar, { paddingBottom: insets.bottom + 16 }]}>
-        {connStatus === 'none' && (
-          <Button
-            label="Connect"
-            onPress={() => setModalVisible(true)}
-            variant="primary"
-            fullWidth
-            style={styles.actionBtn}
-          />
-        )}
-        {connStatus === 'connected' && (
-          <Button
-            label="Message"
-            onPress={() => showToast('Chat coming in Layer 5')}
-            variant="primary"
-            fullWidth
-            style={styles.actionBtn}
-          />
-        )}
-        {connStatus === 'pending_sent' && (
-          <Button
-            label="Request sent"
-            onPress={() => {}}
-            variant="ghost"
-            fullWidth
-            disabled
-            style={styles.actionBtn}
-          />
-        )}
-        {connStatus === 'pending_received' && (
-          <View style={styles.twoButtonRow}>
+      {/* Action bar — only show once loaded */}
+      {!loading && (
+        <View style={[styles.actionBar, { paddingBottom: insets.bottom + 16 }]}>
+          {connStatus === 'none' && (
             <Button
-              label="Accept"
-              onPress={async () => {
-                if (!requestId) return;
-                await acceptConnectionRequest(requestId);
-                setConnStatus('connected');
-                showToast(`You and ${profile?.full_name} are now connected!`);
+              label="Connect"
+              onPress={() => setModalVisible(true)}
+              variant="primary"
+              fullWidth
+              style={styles.actionBtn}
+            />
+          )}
+          {connStatus === 'connected' && (
+            <Button
+              label="Message"
+              onPress={() => {
+                if (connectionId) {
+                  router.push(`/chat/${connectionId}`);
+                }
               }}
               variant="primary"
-              style={[styles.actionBtn, { flex: 1 }]}
+              fullWidth
+              style={styles.actionBtn}
             />
+          )}
+          {connStatus === 'pending_sent' && (
             <Button
-              label="Decline"
-              onPress={async () => {
-                if (!requestId) return;
-                await declineConnectionRequest(requestId);
-                setConnStatus('none');
-                setRequestId(null);
-              }}
+              label="Request sent"
+              onPress={() => {}}
               variant="ghost"
-              style={[styles.actionBtn, { flex: 1 }]}
+              fullWidth
+              disabled
+              style={styles.actionBtn}
             />
-          </View>
-        )}
-      </View>
+          )}
+          {connStatus === 'pending_received' && (
+            <View style={styles.twoButtonRow}>
+              <Button
+                label="Accept"
+                onPress={async () => {
+                  if (!requestId) return;
+                  await acceptConnectionRequest(requestId);
+                  // Fetch the newly-created connection ID
+                  const { data: conn } = await supabase
+                    .from('connections')
+                    .select('id')
+                    .or(
+                      `and(user_a.eq.${user!.id},user_b.eq.${id}),and(user_a.eq.${id},user_b.eq.${user!.id})`
+                    )
+                    .limit(1)
+                    .single();
+                  if (conn) setConnectionId(conn.id);
+                  setConnStatus('connected');
+                  showToast(`You and ${profile?.full_name} are now connected!`, 'success');
+                }}
+                variant="primary"
+                style={[styles.actionBtn, { flex: 1 }]}
+              />
+              <Button
+                label="Decline"
+                onPress={async () => {
+                  if (!requestId) return;
+                  await declineConnectionRequest(requestId);
+                  setConnStatus('none');
+                  setRequestId(null);
+                }}
+                variant="ghost"
+                style={[styles.actionBtn, { flex: 1 }]}
+              />
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Connection modal */}
       {profile && (
@@ -285,16 +330,17 @@ export default function ProfileViewScreen() {
           onSent={() => {
             setModalVisible(false);
             setConnStatus('pending_sent');
-            showToast(`Connection request sent to ${profile.full_name}!`);
+            showToast(`Connection request sent to ${profile.full_name}!`, 'success');
           }}
         />
       )}
 
-      {toast ? (
-        <View style={styles.toast} pointerEvents="none">
-          <Text style={styles.toastText}>{toast}</Text>
-        </View>
-      ) : null}
+      <Toast
+        visible={toastVisible}
+        message={toastMsg}
+        type={toastType}
+        onDismiss={() => setToastVisible(false)}
+      />
     </ScreenBackground>
   );
 }
@@ -328,10 +374,9 @@ const styles = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: Colors.glass.border,
     marginBottom: 14,
-    overflow: 'hidden',
   },
   statCell: { flex: 1, alignItems: 'center', paddingVertical: 14 },
-  statNum: { fontSize: 18, fontWeight: '700', color: Colors.text.primary },
+  statNum: { fontSize: 14, fontWeight: '700', color: Colors.text.primary },
   statLabel: { fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2 },
   statDivider: { width: 0.5, backgroundColor: 'rgba(255,255,255,0.06)', marginVertical: 10 },
   card: { marginBottom: 10, gap: 10 },
@@ -357,6 +402,7 @@ const styles = StyleSheet.create({
   detailEmpty: { fontSize: 12, color: 'rgba(255,255,255,0.3)' },
   projectsInner: { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: 12 },
   projectText: { fontSize: 12, color: 'rgba(255,255,255,0.6)', lineHeight: 18 },
+  emptyHint: { fontSize: 12, color: 'rgba(255,255,255,0.3)' },
   actionBar: {
     position: 'absolute',
     bottom: 0,
@@ -370,16 +416,4 @@ const styles = StyleSheet.create({
   },
   actionBtn: { height: 48 },
   twoButtonRow: { flexDirection: 'row', gap: 10 },
-  toast: {
-    position: 'absolute',
-    bottom: 110,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(30,30,40,0.95)',
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 20,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
-  toastText: { fontSize: 13, color: Colors.text.body, fontWeight: '500' },
 });

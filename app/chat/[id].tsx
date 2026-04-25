@@ -8,8 +8,8 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
   Linking,
+  ScrollView,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,6 +21,7 @@ import { useChatStore } from '../../stores/chatStore';
 import { fetchUnreadCount } from '../../lib/queries';
 import { ScreenBackground } from '../../components/ScreenBackground';
 import { Avatar } from '../../components/ui/Avatar';
+import { SkeletonMessageBubble } from '../../components/ui/Skeleton';
 import { Colors } from '../../constants/colors';
 import type { Profile } from '../../types/database';
 import type { RealtimeChannel } from '@supabase/supabase-js';
@@ -80,8 +81,6 @@ export default function ChatThreadScreen() {
 
   const { setTotalUnread } = useChatStore();
 
-  // Mark this thread as read and sync the tab badge every time the screen is focused.
-  // Covers: initial open, returning from another screen, and background→foreground.
   useFocusEffect(
     useCallback(() => {
       if (!connectionId || !user?.id) return;
@@ -94,67 +93,59 @@ export default function ChatThreadScreen() {
     }, [connectionId, user?.id])
   );
 
-  // Fetch other user's profile and messages
   const fetchData = useCallback(async () => {
     if (!connectionId || !user?.id) return;
 
-    // Get the connection to find the other user
-    const { data: conn } = await supabase
-      .from('connections')
-      .select('user_a, user_b')
-      .eq('id', connectionId)
-      .single();
-
-    if (conn) {
-      const otherId = conn.user_a === user.id ? conn.user_b : conn.user_a;
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', otherId)
+    try {
+      const { data: conn } = await supabase
+        .from('connections')
+        .select('user_a, user_b')
+        .eq('id', connectionId)
         .single();
-      if (profile) setOtherProfile(profile);
+
+      if (conn) {
+        const otherId = conn.user_a === user.id ? conn.user_b : conn.user_a;
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', otherId)
+          .single();
+        if (profile) setOtherProfile(profile);
+      }
+
+      const { data: msgs } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('connection_id', connectionId)
+        .order('created_at', { ascending: true });
+
+      setMessages(msgs ?? []);
+      await markChatRead(connectionId, user.id);
+    } catch (err) {
+      console.error('[chat] fetchData error:', err);
+    } finally {
+      setLoading(false);
     }
-
-    const { data: msgs } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('connection_id', connectionId)
-      .order('created_at', { ascending: true });
-
-    setMessages(msgs ?? []);
-    setLoading(false);
-
-    // Mark as read
-    await markChatRead(connectionId, user.id);
   }, [connectionId, user?.id]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // Realtime subscription
   useEffect(() => {
     if (!connectionId) return;
 
     channelRef.current = subscribeToChat(connectionId, (newMsg) => {
-      // Deduplicate — optimistic messages get replaced when the real one arrives
       setMessages((prev) => {
         const exists = prev.some((m) => m.id === newMsg.id);
         if (exists) return prev;
-        // Remove matching optimistic message from same sender with same content
         const filtered = prev.filter(
           (m) => !(m.optimistic && m.sender_id === newMsg.sender_id && m.content === newMsg.content)
         );
         return [...filtered, newMsg];
       });
-      // Scroll to bottom on new message
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
-      // User is already in this thread — mark as read immediately so the badge
-      // does not increment. The message_read_status UPDATE then triggers the
-      // tab navigator's realtime listener which re-counts and keeps badge at 0.
-      if (user?.id) {
-        markChatRead(connectionId, user.id);
-      }
+      if (user?.id) markChatRead(connectionId, user.id);
     });
 
     return () => { unsubscribe(channelRef.current); };
@@ -165,7 +156,6 @@ export default function ChatThreadScreen() {
     const text = inputText.trim();
     setInputText('');
 
-    // Optimistic update
     const optimisticId = `opt_${Date.now()}`;
     const optimisticMsg: Message = {
       id: optimisticId,
@@ -179,12 +169,20 @@ export default function ChatThreadScreen() {
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
 
     setSending(true);
-    await supabase.from('messages').insert({
-      connection_id: connectionId,
-      sender_id: user.id,
-      content: text,
-    });
-    setSending(false);
+    try {
+      await supabase.from('messages').insert({
+        connection_id: connectionId,
+        sender_id: user.id,
+        content: text,
+      });
+    } catch (err) {
+      console.error('[chat] send error:', err);
+      // Remove optimistic message on failure
+      setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+      setInputText(text);
+    } finally {
+      setSending(false);
+    }
   };
 
   const renderMessage = ({ item, index }: { item: Message; index: number }) => {
@@ -207,16 +205,6 @@ export default function ChatThreadScreen() {
       </View>
     );
   };
-
-  if (loading) {
-    return (
-      <ScreenBackground>
-        <View style={[styles.loadingWrap, { paddingTop: insets.top }]}>
-          <ActivityIndicator color={Colors.teal.main} />
-        </View>
-      </ScreenBackground>
-    );
-  }
 
   return (
     <ScreenBackground>
@@ -255,22 +243,35 @@ export default function ChatThreadScreen() {
         </View>
 
         {/* Messages */}
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderMessage}
-          contentContainerStyle={styles.messageList}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <View style={styles.emptyThread}>
-              <Text style={styles.emptyThreadText}>
-                You and {otherProfile?.full_name ?? 'them'} are now connected! Say hello.
-              </Text>
-            </View>
-          }
-        />
+        {loading ? (
+          <ScrollView
+            contentContainerStyle={styles.skeletonList}
+            showsVerticalScrollIndicator={false}
+          >
+            <SkeletonMessageBubble mine={false} />
+            <SkeletonMessageBubble mine />
+            <SkeletonMessageBubble mine={false} />
+            <SkeletonMessageBubble mine />
+            <SkeletonMessageBubble mine={false} />
+          </ScrollView>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            keyExtractor={(item) => item.id}
+            renderItem={renderMessage}
+            contentContainerStyle={styles.messageList}
+            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.emptyThread}>
+                <Text style={styles.emptyThreadText}>
+                  You and {otherProfile?.full_name ?? 'them'} are now connected! Say hello.
+                </Text>
+              </View>
+            }
+          />
+        )}
 
         {/* Input */}
         <View style={[styles.inputBar, { paddingBottom: insets.bottom + 8 }]}>
@@ -302,7 +303,6 @@ export default function ChatThreadScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -321,6 +321,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   topBarName: { fontSize: 16, fontWeight: '600', color: Colors.text.primary, flexShrink: 1 },
+  skeletonList: {
+    paddingHorizontal: 14,
+    paddingTop: 16,
+    paddingBottom: 8,
+    flexGrow: 1,
+  },
   messageList: {
     paddingHorizontal: 14,
     paddingTop: 16,
@@ -330,11 +336,7 @@ const styles = StyleSheet.create({
   messageWrap: { maxWidth: '75%' },
   wrapRight: { alignSelf: 'flex-end', alignItems: 'flex-end' },
   wrapLeft: { alignSelf: 'flex-start', alignItems: 'flex-start' },
-  bubble: {
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
+  bubble: { borderRadius: 16, paddingHorizontal: 12, paddingVertical: 10 },
   bubbleMine: {
     backgroundColor: 'rgba(27,138,143,0.25)',
     borderWidth: 0.5,
