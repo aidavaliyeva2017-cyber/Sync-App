@@ -158,8 +158,8 @@ export default function SettingsScreen() {
         <GlassCard style={{ padding: 0, overflow: 'hidden', marginBottom: 20 }}>
           {[
             { label: 'About Sync', onPress: () => router.push('/about') },
-            { label: 'Terms of Service', onPress: () => showToast('Coming soon') },
-            { label: 'Privacy Policy', onPress: () => showToast('Coming soon') },
+            { label: 'Terms of Service', onPress: () => router.push('/terms') },
+            { label: 'Privacy Policy', onPress: () => router.push('/privacy') },
           ].map((row, i, arr) => (
             <TouchableOpacity
               key={row.label}
