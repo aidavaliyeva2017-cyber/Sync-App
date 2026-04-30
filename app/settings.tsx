@@ -157,7 +157,7 @@ export default function SettingsScreen() {
         <Text style={styles.sectionHeader}>ABOUT</Text>
         <GlassCard style={{ padding: 0, overflow: 'hidden', marginBottom: 20 }}>
           {[
-            { label: 'About Sync', onPress: () => showToast('Sync v1.0.0') },
+            { label: 'About Sync', onPress: () => router.push('/about') },
             { label: 'Terms of Service', onPress: () => showToast('Coming soon') },
             { label: 'Privacy Policy', onPress: () => showToast('Coming soon') },
           ].map((row, i, arr) => (
