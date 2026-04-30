@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Feather } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { getPendingRequestCount } from '../../lib/connections';
@@ -16,6 +17,7 @@ import { generateMatch } from '../../lib/matching';
 import { useAuthStore } from '../../stores/authStore';
 import { useProfileStore } from '../../stores/profileStore';
 import { useNotificationStore } from '../../stores/notificationStore';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { ScreenBackground } from '../../components/ScreenBackground';
 import { Avatar } from '../../components/ui/Avatar';
 import { Tag } from '../../components/ui/Tag';
@@ -53,8 +55,8 @@ export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
-  const { profile } = useProfileStore();
-  const { unreadCount: notifUnread, setUnreadCount: setNotifUnread } = useNotificationStore();
+  const { profile, setProfile } = useProfileStore();
+  const { unreadCount: notifUnread, setUnreadCount: setNotifUnread, incrementUnreadCount } = useNotificationStore();
 
   const [matchProfile, setMatchProfile] = useState<Profile | null>(null);
   const [matchReason, setMatchReason] = useState('');
@@ -67,8 +69,6 @@ export default function HomeScreen() {
   const [toastMsg, setToastMsg] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
   const [modalVisible, setModalVisible] = useState(false);
-  const [menuVisible, setMenuVisible] = useState(false);
-  const [networkError, setNetworkError] = useState(false);
 
   const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToastMsg(msg);
@@ -78,7 +78,6 @@ export default function HomeScreen() {
 
   const fetchData = useCallback(async () => {
     if (!user?.id) return;
-    setNetworkError(false);
 
     try {
       const [pendingCnt, connectionsRes, requestsRes, incomingRes] = await Promise.all([
@@ -111,27 +110,30 @@ export default function HomeScreen() {
         return { connectionId: c.id, otherId };
       });
 
-      // Smart match algorithm
-      if (profile) {
+      // Smart match algorithm — fall back to a Supabase fetch if the store profile hasn't loaded yet
+      let currentProfile = profile;
+      if (!currentProfile && user?.id) {
+        const { data: fetchedProfile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+        if (fetchedProfile) {
+          setProfile(fetchedProfile);
+          currentProfile = fetchedProfile;
+        }
+      }
+
+      if (currentProfile) {
         try {
-          const match = await generateMatch(user.id, profile);
+          const match = await generateMatch(user.id, currentProfile);
           if (match) {
-            // Verify the match isn't already connected/pending
-            const alreadyConn = connectedIds.has(match.profile.id);
+            // matching.ts already excludes connected + pending; only extra case to handle
+            // is a pending_sent match (show card in "requested" state)
             const alreadySent = sentToIds.has(match.profile.id);
-            const alreadyReceived = receivedFromIds.has(match.profile.id);
-            if (!alreadyConn && !alreadySent && !alreadyReceived) {
-              setMatchProfile(match.profile);
-              setMatchReason(match.reason);
-              setMatchConnStatus('none');
-            } else if (alreadySent) {
-              setMatchProfile(match.profile);
-              setMatchReason(match.reason);
-              setMatchConnStatus('request_sent');
-            } else {
-              setMatchProfile(null);
-              setMatchReason('');
-            }
+            setMatchProfile(match.profile);
+            setMatchReason(match.reason);
+            setMatchConnStatus(alreadySent ? 'request_sent' : 'none');
           } else {
             setMatchProfile(null);
             setMatchReason('');
@@ -140,6 +142,8 @@ export default function HomeScreen() {
           console.error('[home] match generation error:', err);
           setMatchProfile(null);
         }
+      } else {
+        console.warn('[home] profile not available for match generation');
       }
 
       // Fetch chat previews (up to 3 most recent connections)
@@ -207,12 +211,11 @@ export default function HomeScreen() {
       setNotifUnread(count ?? 0);
     } catch (err) {
       console.error('[home] fetchData error:', err);
-      setNetworkError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.id, profile]);
+  }, [user?.id, profile, setProfile]);
 
   useFocusEffect(
     useCallback(() => {
@@ -220,9 +223,35 @@ export default function HomeScreen() {
     }, [fetchData])
   );
 
+  // Realtime: increment badge when a new notification arrives for this user
+  React.useEffect(() => {
+    if (!user?.id) return;
+
+    let channel: RealtimeChannel | null = null;
+    channel = supabase
+      .channel(`home-notif-badge-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          incrementUnreadCount();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
+
   const onRefresh = () => { setRefreshing(true); fetchData(); };
 
-  const tabBarHeight = 54 + insets.bottom;
+  const tabBarHeight = useBottomTabBarHeight();
 
   return (
     <ScreenBackground>
@@ -261,13 +290,15 @@ export default function HomeScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.iconBtn}
-              onPress={() => setMenuVisible((v) => !v)}
+              onPress={() => router.push('/settings')}
               activeOpacity={0.7}
             >
-              <Feather name="more-vertical" size={16} color={Colors.text.icon} />
+              <Feather name="settings" size={17} color={Colors.text.icon} />
             </TouchableOpacity>
           </View>
         </View>
+
+        <NetworkBanner onRetry={() => { setLoading(true); fetchData(); }} />
 
         {/* Pending requests banner */}
         {pendingCount > 0 && (
@@ -407,27 +438,6 @@ export default function HomeScreen() {
         </GlassCard>
       </ScrollView>
 
-      {/* Backdrop dismiss for dropdown */}
-      {menuVisible && (
-        <TouchableOpacity
-          style={StyleSheet.absoluteFill}
-          onPress={() => setMenuVisible(false)}
-          activeOpacity={0}
-        />
-      )}
-
-      {/* Floating dropdown */}
-      {menuVisible && (
-        <TouchableOpacity
-          style={[styles.dropdown, { top: insets.top + 54, right: 14 }]}
-          onPress={() => { setMenuVisible(false); router.push('/settings'); }}
-          activeOpacity={0.8}
-        >
-          <Feather name="settings" size={14} color={Colors.text.body} style={{ marginRight: 8 }} />
-          <Text style={styles.dropdownText}>Settings</Text>
-        </TouchableOpacity>
-      )}
-
       {/* Connection modal */}
       {matchProfile && (
         <ConnectionModal
@@ -443,8 +453,6 @@ export default function HomeScreen() {
           }}
         />
       )}
-
-      <NetworkBanner visible={networkError} onRetry={() => { setLoading(true); fetchData(); }} />
 
       <Toast
         visible={toastVisible}
@@ -482,25 +490,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dropdown: {
-    position: 'absolute',
-    backgroundColor: Colors.background.surface,
-    borderRadius: 12,
-    borderWidth: 0.5,
-    borderColor: Colors.glass.border,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    zIndex: 200,
-    minWidth: 130,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 10,
-  },
-  dropdownText: { fontSize: 14, color: Colors.text.body },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',

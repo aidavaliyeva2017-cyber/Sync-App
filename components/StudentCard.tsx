@@ -15,6 +15,7 @@ interface StudentCardProps {
   profile: Profile;
   connectionStatus?: ConnectionStatus;
   requestId?: string;        // needed for pending_received accept/decline
+  connectionId?: string;     // needed for connected → Message navigation
   onStatusChange?: (profileId: string, newStatus: ConnectionStatus) => void;
   onToast?: (msg: string) => void;
 }
@@ -23,6 +24,7 @@ export function StudentCard({
   profile,
   connectionStatus = 'none',
   requestId,
+  connectionId,
   onStatusChange,
   onToast,
 }: StudentCardProps) {
@@ -149,18 +151,13 @@ export function StudentCard({
         )}
 
         {connectionStatus === 'connected' && (
-          <>
-            <View style={styles.connectedBadge}>
-              <Text style={styles.connectedText}>Connected</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.viewBtn}
-              onPress={() => onToast?.('Chat coming in Layer 5')}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.viewBtnText}>Message</Text>
-            </TouchableOpacity>
-          </>
+          <TouchableOpacity
+            style={styles.messageBtn}
+            onPress={() => connectionId && router.push(`/chat/${connectionId}`)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.messageBtnText}>Message</Text>
+          </TouchableOpacity>
         )}
       </View>
 
@@ -243,15 +240,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   viewBtnText: { fontSize: 12, fontWeight: '500', color: 'rgba(255,255,255,0.6)' },
-  connectedBadge: {
+  messageBtn: {
     flex: 1,
     height: 36,
-    backgroundColor: Colors.teal.verifiedBg,
+    backgroundColor: 'rgba(255,255,255,0.08)',
     borderRadius: 10,
     borderWidth: 0.5,
-    borderColor: Colors.teal.tagBorderAlpha,
+    borderColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  connectedText: { fontSize: 12, fontWeight: '500', color: Colors.teal.bright },
+  messageBtnText: { fontSize: 12, fontWeight: '500', color: Colors.text.body },
 });

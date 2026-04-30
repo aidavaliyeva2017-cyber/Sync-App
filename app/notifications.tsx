@@ -77,7 +77,7 @@ export default function NotificationsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
-  const { setUnreadCount } = useNotificationStore();
+  const { setUnreadCount, markAllAsSeen } = useNotificationStore();
 
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -138,8 +138,10 @@ export default function NotificationsScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      // Immediately clear the bell badge when this screen is opened (seen ≠ read)
+      markAllAsSeen();
       fetchNotifications();
-    }, [fetchNotifications])
+    }, [fetchNotifications, markAllAsSeen])
   );
 
   const onRefresh = () => { setRefreshing(true); fetchNotifications(); };

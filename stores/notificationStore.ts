@@ -8,6 +8,8 @@ interface NotificationState {
   appendNotification: (notification: Notification) => void;
   markAsRead: (notificationId: string) => void;
   setUnreadCount: (count: number) => void;
+  incrementUnreadCount: () => void;
+  markAllAsSeen: () => void;
   reset: () => void;
 }
 
@@ -38,6 +40,11 @@ export const useNotificationStore = create<NotificationState>((set) => ({
     })),
 
   setUnreadCount: (unreadCount) => set({ unreadCount }),
+
+  incrementUnreadCount: () => set((state) => ({ unreadCount: state.unreadCount + 1 })),
+
+  // Clears the bell badge without writing to the DB (seen ≠ read)
+  markAllAsSeen: () => set({ unreadCount: 0 }),
 
   reset: () => set({ notifications: [], unreadCount: 0 }),
 }));

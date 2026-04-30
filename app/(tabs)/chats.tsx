@@ -10,6 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
@@ -20,6 +21,7 @@ import { RequestCard, type RequestCardData } from '../../components/RequestCard'
 import { ChatListItem } from '../../components/ChatListItem';
 import { Avatar } from '../../components/ui/Avatar';
 import { Toast } from '../../components/ui/Toast';
+import { NetworkBanner } from '../../components/ui/NetworkBanner';
 import { SkeletonChatRow } from '../../components/ui/Skeleton';
 import { Colors } from '../../constants/colors';
 import { Typography } from '../../constants/typography';
@@ -256,7 +258,7 @@ export default function ChatsScreen() {
 
   const onRefresh = () => { setRefreshing(true); fetchAll(); };
 
-  const tabBarHeight = 54 + insets.bottom;
+  const tabBarHeight = useBottomTabBarHeight();
   const unreadCount = conversations.filter((c) => c.unread).length;
   const totalRequestsBadge = incoming.length;
 
@@ -275,6 +277,8 @@ export default function ChatsScreen() {
         <Text style={styles.subtitle}>
           {conversations.length} {conversations.length === 1 ? 'connection' : 'connections'}
         </Text>
+
+        <NetworkBanner onRetry={() => { setRefreshing(true); fetchAll(); }} />
 
         {/* Search bar */}
         <View style={styles.searchBar}>

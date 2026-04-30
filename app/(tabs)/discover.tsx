@@ -10,6 +10,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Feather } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
@@ -35,8 +36,8 @@ type ConnStatus = ConnectionStatus;
 
 export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
   const { user } = useAuthStore();
-  const tabBarHeight = 54 + insets.bottom;
 
   const [search, setSearch] = useState('');
   const [activeChips, setActiveChips] = useState<string[]>([]);
@@ -44,12 +45,12 @@ export default function DiscoverScreen() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [connStatuses, setConnStatuses] = useState<Record<string, ConnStatus>>({});
   const [requestIds, setRequestIds] = useState<Record<string, string>>({});
+  const [connectionIds, setConnectionIds] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
-  const [networkError, setNetworkError] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -62,7 +63,6 @@ export default function DiscoverScreen() {
     async (searchVal: string, chips: string[], type: ConnectType) => {
       if (!user?.id) return;
       setLoading(true);
-      setNetworkError(false);
 
       try {
         let query = supabase
@@ -97,7 +97,7 @@ export default function DiscoverScreen() {
           const [connRes, reqRes] = await Promise.all([
             supabase
               .from('connections')
-              .select('user_a, user_b')
+              .select('id, user_a, user_b')
               .or(`user_a.eq.${user.id},user_b.eq.${user.id}`),
             supabase
               .from('connection_requests')
@@ -109,9 +109,13 @@ export default function DiscoverScreen() {
           const statusMap: Record<string, ConnStatus> = {};
           data.forEach((p) => { statusMap[p.id] = 'none'; });
 
+          const connectionIdMap: Record<string, string> = {};
           connRes.data?.forEach((c) => {
             const other = c.user_a === user.id ? c.user_b : c.user_a;
-            if (statusMap[other] !== undefined) statusMap[other] = 'connected';
+            if (statusMap[other] !== undefined) {
+              statusMap[other] = 'connected';
+              connectionIdMap[other] = c.id;
+            }
           });
 
           const requestIdMap: Record<string, string> = {};
@@ -126,10 +130,10 @@ export default function DiscoverScreen() {
 
           setConnStatuses(statusMap);
           setRequestIds(requestIdMap);
+          setConnectionIds(connectionIdMap);
         }
       } catch (err) {
         console.error('[Discover] fetch error:', err);
-        setNetworkError(true);
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -170,6 +174,8 @@ export default function DiscoverScreen() {
       <View style={[styles.container, { paddingTop: insets.top + 16 }]}>
         {/* Header */}
         <Text style={styles.screenTitle}>Discover</Text>
+
+        <NetworkBanner onRetry={() => { setLoading(true); fetchProfiles(search, activeChips, connectType); }} />
 
         {/* Search bar */}
         <View style={styles.searchBar}>
@@ -293,6 +299,7 @@ export default function DiscoverScreen() {
                 profile={item}
                 connectionStatus={connStatuses[item.id] ?? 'none'}
                 requestId={requestIds[item.id]}
+                connectionId={connectionIds[item.id]}
                 onStatusChange={(profileId, newStatus) =>
                   setConnStatuses((prev) => ({ ...prev, [profileId]: newStatus }))
                 }
@@ -311,14 +318,6 @@ export default function DiscoverScreen() {
           />
         )}
       </View>
-
-      <NetworkBanner
-        visible={networkError}
-        onRetry={() => {
-          setLoading(true);
-          fetchProfiles(search, activeChips, connectType);
-        }}
-      />
 
       <Toast
         visible={toastVisible}

@@ -72,46 +72,7 @@ function scoreCandidate(
   return { score: total, reason };
 }
 
-export async function generateMatch(
-  userId: string,
-  userProfile: Profile,
-): Promise<{ profile: Profile; score: number; reason: string } | null> {
-  // Return today's cached match if one exists
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-
-  const { data: existing } = await supabase
-    .from('match_suggestions')
-    .select('suggested_user_id, score, reason')
-    .eq('user_id', userId)
-    .gte('shown_at', todayStart.toISOString())
-    .order('score', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (existing?.suggested_user_id) {
-    const { data: cached } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', existing.suggested_user_id)
-      .single();
-    if (cached) {
-      return { profile: cached, score: existing.score ?? 0, reason: existing.reason ?? '' };
-    }
-  }
-
-  // Fetch candidate pool
-  const { data: candidates, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('onboarding_complete', true)
-    .neq('id', userId)
-    .limit(100);
-
-  if (error) console.error('[matching] candidates fetch error:', error);
-  if (!candidates || candidates.length === 0) return null;
-
-  // Exclude connected + pending
+async function buildExcludeSet(userId: string): Promise<Set<string>> {
   const [connRes, reqRes] = await Promise.all([
     supabase
       .from('connections')
@@ -127,8 +88,62 @@ export async function generateMatch(
   const exclude = new Set<string>();
   connRes.data?.forEach((c) => exclude.add(c.user_a === userId ? c.user_b : c.user_a));
   reqRes.data?.forEach((r) => exclude.add(r.sender_id === userId ? r.receiver_id : r.sender_id));
+  return exclude;
+}
 
+export async function generateMatch(
+  userId: string,
+  userProfile: Profile,
+): Promise<{ profile: Profile; score: number; reason: string } | null> {
+  // Return today's cached match if one exists AND is still eligible
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const { data: existing } = await supabase
+    .from('match_suggestions')
+    .select('suggested_user_id, score, reason')
+    .eq('user_id', userId)
+    .gte('shown_at', todayStart.toISOString())
+    .order('score', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (existing?.suggested_user_id) {
+    const [cachedRes, excludeSet] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', existing.suggested_user_id).single(),
+      buildExcludeSet(userId),
+    ]);
+
+    if (cachedRes.data && !excludeSet.has(existing.suggested_user_id)) {
+      console.log('[matching] returning cached match:', cachedRes.data.full_name, 'score:', existing.score);
+      return { profile: cachedRes.data, score: existing.score ?? 0, reason: existing.reason ?? '' };
+    }
+    console.log('[matching] cached match is no longer eligible — generating fresh');
+  }
+
+  // Fetch candidate pool
+  const { data: candidates, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('onboarding_complete', true)
+    .neq('id', userId)
+    .limit(100);
+
+  if (error) {
+    console.error('[matching] candidates fetch error:', error);
+    return null;
+  }
+
+  console.log('[matching] candidate pool size:', candidates?.length ?? 0);
+
+  if (!candidates || candidates.length === 0) return null;
+
+  // Exclude connected + pending (re-use fresh set for correctness)
+  const exclude = await buildExcludeSet(userId);
   const eligible = candidates.filter((c) => !exclude.has(c.id));
+
+  console.log('[matching] eligible after exclusions:', eligible.length, '| excluded:', exclude.size);
+
   if (eligible.length === 0) return null;
 
   // Score and pick the best
@@ -137,8 +152,9 @@ export async function generateMatch(
     .sort((a, b) => b.score - a.score);
 
   const best = scored[0];
+  console.log('[matching] best match:', best.profile.full_name, 'score:', best.score, 'reason:', best.reason);
 
-  // Persist suggestion (non-blocking, ignore errors)
+  // Persist suggestion (non-blocking)
   supabase
     .from('match_suggestions')
     .insert({
@@ -149,8 +165,10 @@ export async function generateMatch(
       shown_at: new Date().toISOString(),
       was_acted_on: false,
     })
-    .then(() => {})
-    .catch((err) => console.warn('[matching] could not store suggestion:', err));
+    .then(
+      () => {},
+      (err: unknown) => console.error('[matching] could not store suggestion (check RLS):', err),
+    );
 
   return best;
 }

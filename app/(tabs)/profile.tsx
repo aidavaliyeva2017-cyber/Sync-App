@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Feather } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { getConnectionCount, getPendingRequestCount } from '../../lib/connections';
@@ -20,6 +21,7 @@ import { Avatar } from '../../components/ui/Avatar';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Tag } from '../../components/ui/Tag';
 import { SkeletonProfile, Skeleton } from '../../components/ui/Skeleton';
+import { NetworkBanner } from '../../components/ui/NetworkBanner';
 import { Colors } from '../../constants/colors';
 import { Typography } from '../../constants/typography';
 
@@ -64,7 +66,7 @@ export default function ProfileScreen() {
 
   const onRefresh = () => { setRefreshing(true); fetchData(); };
 
-  const tabBarHeight = 54 + insets.bottom;
+  const tabBarHeight = useBottomTabBarHeight();
 
   return (
     <ScreenBackground>
@@ -94,6 +96,8 @@ export default function ProfileScreen() {
             <Feather name="settings" size={17} color={Colors.text.icon} />
           </TouchableOpacity>
         </View>
+
+        <NetworkBanner onRetry={() => { setRefreshing(true); fetchData(); }} />
 
         {loading ? (
           <>
