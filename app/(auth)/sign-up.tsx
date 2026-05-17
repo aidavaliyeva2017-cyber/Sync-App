@@ -12,11 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import * as Linking from 'expo-linking';
-import * as WebBrowser from 'expo-web-browser';
-import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase } from '../../lib/supabase';
-import { handleAuthCallbackUrl } from '../../lib/auth';
 import { ScreenBackground } from '../../components/ScreenBackground';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Button } from '../../components/ui/Button';
@@ -55,12 +51,9 @@ export default function SignUpScreen() {
   const handleSignUp = async () => {
     if (!validate()) return;
     setLoading(true);
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
-      options: {
-        emailRedirectTo: 'sync://auth-callback',
-      },
     });
     setLoading(false);
     if (error) {
@@ -73,42 +66,16 @@ export default function SignUpScreen() {
       }
       return;
     }
-    router.replace({
-      pathname: '/(auth)/verify-email',
-      params: { email: email.trim() },
-    });
-  };
-
-  const handleGoogleSignIn = async () => {
-    setLoading(true);
-    const redirectUrl = Linking.createURL('auth-callback');
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: redirectUrl, skipBrowserRedirect: true },
-    });
-    if (error || !data?.url) { setLoading(false); return; }
-    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
-    if (result.type === 'success' && result.url) {
-      await handleAuthCallbackUrl(result.url);
+    // Supabase returns identities:[] when the email is already taken (no error thrown)
+    if (data.user && data.user.identities && data.user.identities.length === 0) {
+      setEmailError('An account with this email already exists.');
+      setAlreadyRegistered(true);
+      return;
     }
-    setLoading(false);
-  };
-
-  const handleAppleSignIn = async () => {
-    try {
-      const credential = await AppleAuthentication.signInAsync({
-        requestedScopes: [
-          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-          AppleAuthentication.AppleAuthenticationScope.EMAIL,
-        ],
-      });
-      if (credential.identityToken) {
-        setLoading(true);
-        await supabase.auth.signInWithIdToken({ provider: 'apple', token: credential.identityToken });
-        setLoading(false);
-      }
-    } catch {
-      // User cancelled or Apple Sign-In unavailable
+    if (data.session) {
+      router.replace('/(onboarding)/step-1');
+    } else {
+      router.replace('/(auth)/login');
     }
   };
 
@@ -130,7 +97,7 @@ export default function SignUpScreen() {
           showsVerticalScrollIndicator={false}
         >
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => router.replace('/(auth)/welcome')}
             style={styles.backBtn}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
@@ -227,30 +194,6 @@ export default function SignUpScreen() {
             />
           </GlassCard>
 
-          <View style={styles.dividerRow}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OR</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <TouchableOpacity
-            style={styles.socialBtn}
-            onPress={handleGoogleSignIn}
-            activeOpacity={0.7}
-          >
-            <Feather name="globe" size={18} color={Colors.text.body} />
-            <Text style={styles.socialBtnText}>Continue with Google</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.socialBtn, { marginTop: 10 }]}
-            onPress={handleAppleSignIn}
-            activeOpacity={0.7}
-          >
-            <Feather name="smartphone" size={18} color={Colors.text.body} />
-            <Text style={styles.socialBtnText}>Continue with Apple</Text>
-          </TouchableOpacity>
-
           <View style={styles.bottomRow}>
             <Text style={styles.bottomText}>Already have an account? </Text>
             <TouchableOpacity onPress={() => router.replace('/(auth)/login')}>
@@ -310,34 +253,6 @@ const styles = StyleSheet.create({
     color: Colors.teal.bright,
   },
   tallBtn: { height: 48 },
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginVertical: 20,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 0.5,
-    backgroundColor: Colors.glass.divider,
-  },
-  dividerText: { fontSize: 12, color: Colors.text.label },
-  socialBtn: {
-    height: 48,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    backgroundColor: Colors.ghost.bg,
-    borderRadius: 12,
-    borderWidth: 0.5,
-    borderColor: Colors.ghost.border,
-  },
-  socialBtnText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.text.body,
-  },
   bottomRow: {
     flexDirection: 'row',
     justifyContent: 'center',
