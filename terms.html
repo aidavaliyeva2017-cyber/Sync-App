@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Terms of Service — Sync</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #0A0A0F;
+    color: rgba(255,255,255,0.65);
+    font-size: 14px;
+    line-height: 1.7;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before, body::after {
+    content: '';
+    position: fixed;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+  }
+  body::before {
+    width: 500px; height: 500px;
+    top: -120px; left: -120px;
+    background: radial-gradient(circle, rgba(27,138,143,0.18) 0%, transparent 70%);
+  }
+  body::after {
+    width: 440px; height: 440px;
+    top: -80px; right: -100px;
+    background: radial-gradient(circle, rgba(212,107,158,0.10) 0%, transparent 70%);
+  }
+
+  .wrapper {
+    position: relative;
+    z-index: 1;
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 48px 20px 80px;
+  }
+
+  .nav {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .nav-logo {
+    font-weight: 800;
+    font-size: 22px;
+    color: #fff;
+    letter-spacing: -0.5px;
+    text-decoration: none;
+  }
+  .nav-divider {
+    width: 1px;
+    height: 18px;
+    background: rgba(255,255,255,0.15);
+  }
+  .nav-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.4);
+  }
+  .nav-links {
+    margin-left: auto;
+    display: flex;
+    gap: 16px;
+  }
+  .nav-links a {
+    font-size: 12px;
+    color: rgba(255,255,255,0.35);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: #5DD8DE; }
+
+  h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.3px;
+    margin-bottom: 6px;
+  }
+  .last-updated {
+    font-size: 12px;
+    color: rgba(255,255,255,0.3);
+    margin-bottom: 32px;
+  }
+
+  .card {
+    background: rgba(255,255,255,0.06);
+    border: 0.5px solid rgba(255,255,255,0.10);
+    border-radius: 16px;
+    padding: 28px 24px;
+    margin-bottom: 16px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  h2 {
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+    margin-top: 24px;
+    margin-bottom: 8px;
+  }
+  h2:first-child { margin-top: 0; }
+
+  p { margin-bottom: 10px; }
+  p:last-child { margin-bottom: 0; }
+
+  strong {
+    color: #fff;
+    font-weight: 600;
+  }
+
+  ul {
+    list-style: none;
+    padding-left: 0;
+    margin: 8px 0 10px;
+  }
+  ul li {
+    position: relative;
+    padding-left: 16px;
+    margin-bottom: 4px;
+  }
+  ul li::before {
+    content: '·';
+    position: absolute;
+    left: 0;
+    color: rgba(255,255,255,0.4);
+    font-size: 18px;
+    line-height: 1.5;
+  }
+
+  /* Rose accent box */
+  .rose-box {
+    background: rgba(212,107,158,0.08);
+    border: 0.5px solid rgba(212,107,158,0.18);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin: 10px 0;
+    color: rgba(232,143,181,0.85);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .contact {
+    background: rgba(255,255,255,0.04);
+    border: 0.5px solid rgba(255,255,255,0.10);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-top: 4px;
+  }
+  .contact-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 4px;
+  }
+  .contact-email {
+    font-size: 14px;
+    font-weight: 600;
+    color: #5DD8DE;
+    text-decoration: none;
+  }
+  .contact-email:hover { text-decoration: underline; }
+
+  @media (max-width: 520px) {
+    .wrapper { padding: 32px 16px 60px; }
+    h1 { font-size: 24px; }
+    .card { padding: 20px 16px; }
+    .nav-links { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <nav class="nav">
+    <a href="index.html" class="nav-logo">Sync</a>
+    <div class="nav-divider"></div>
+    <span class="nav-label">Legal</span>
+    <div class="nav-links">
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
+    </div>
+  </nav>
+
+  <h1>Terms of Service</h1>
+  <p class="last-updated">Last updated: May 2026</p>
+
+  <div class="card">
+
+    <h2>1. Acceptance of Terms</h2>
+    <p>By creating an account or using Sync ("the App"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, you must not access or use the App. These Terms constitute a legally binding agreement between you and Aida Valiyeva ("we," "us," or "our").</p>
+
+    <h2>2. Eligibility</h2>
+    <p>You must be at least 16 years of age to create an account and use Sync. This minimum age reflects the threshold under Article 8 of the General Data Protection Regulation (GDPR) for consent to personal data processing in Germany. By registering, you confirm that you meet this requirement and have the legal capacity to enter into a binding agreement. We reserve the right to verify eligibility and to suspend or delete accounts where this requirement is not met.</p>
+
+    <h2>3. User Accounts</h2>
+    <p>You are solely responsible for safeguarding your login credentials and for all activity that occurs under your account. You must notify us immediately at about@sync.io if you suspect any unauthorised access or security breach. Account credentials are personal and non-transferable; you may not share, sell, or otherwise transfer access to your account. You agree to provide accurate, current, and complete information when creating your profile and to keep that information up to date.</p>
+
+    <h2>4. Acceptable Use</h2>
+    <p>You agree not to:</p>
+    <ul>
+      <li>Impersonate any person or misrepresent your identity, affiliation, or academic institution</li>
+      <li>Harass, threaten, intimidate, abuse, or harm other users in any way</li>
+      <li>Post, share, or transmit spam, fraudulent, deceptive, or misleading content</li>
+      <li>Attempt to circumvent or undermine the App's security, authentication, or access controls</li>
+      <li>Use the App for unsolicited commercial solicitation, advertising, or promotional purposes</li>
+      <li>Collect or harvest personal data of other users without their explicit consent</li>
+      <li>Violate any applicable local, national, or international law or regulation, including the GDPR</li>
+    </ul>
+
+    <h2>5. User Content</h2>
+    <p>You retain full ownership of all content you submit to the App, including profile information and messages ("User Content"). By submitting User Content, you grant Aida Valiyeva a limited, non-exclusive, royalty-free, worldwide licence to store, display, and transmit that content solely as necessary to operate and provide the App. This licence terminates when you delete the relevant content or your account. We do not sell or licence your User Content to third parties. The processing of your personal data in connection with User Content is governed by our <a href="privacy.html" class="contact-email">Privacy Policy</a>.</p>
+
+    <h2>6. Connections &amp; Safety</h2>
+    <p>Sync facilitates introductions between students but does not conduct background checks on users. We cannot guarantee the accuracy of information provided by other users, nor are we responsible for the conduct of users on or off the platform. Always exercise personal judgement and take appropriate precautions when interacting with or meeting connections in person. If you encounter behaviour that violates these Terms, please report it to us at about@sync.io.</p>
+
+    <h2>7. Termination</h2>
+    <p>We reserve the right to suspend or permanently terminate your account, without prior notice, if we reasonably believe you have violated these Terms or if required by applicable law. Upon termination, your right to access the App ceases immediately. You may request deletion of your account at any time via Settings → Delete account or by contacting us at about@sync.io. Account deletion and the handling of your personal data thereafter will be processed in accordance with our Privacy Policy and applicable statutory data retention obligations.</p>
+
+    <h2>8. Disclaimer of Warranties</h2>
+    <div class="rose-box">
+      The App is provided on an "as is" and "as available" basis, without warranties of any kind, to the fullest extent permitted by applicable law. We do not warrant that the App will be uninterrupted, error-free, or free of harmful components; that match suggestions will be accurate or suitable; or that other users will act in accordance with these Terms. Nothing in this clause excludes or limits liability for death, personal injury, or damages caused by our wilful misconduct or gross negligence, which cannot be excluded under mandatory provisions of German law (§ 309 No. 7 BGB).
+    </div>
+
+    <h2>9. Limitation of Liability</h2>
+    <p>To the maximum extent permitted under applicable German law, Aida Valiyeva shall not be liable for any indirect, incidental, special, punitive, or consequential damages — including loss of data, revenue, goodwill, or business opportunity — arising from your use of, or inability to use, the App. Our aggregate liability to you for direct damages shall not exceed the total amount paid by you, if any, for access to the App in the twelve months preceding the relevant claim. Nothing in these Terms limits or excludes liability for death or personal injury caused by our negligence, for fraud or fraudulent misrepresentation, or for any liability that cannot lawfully be excluded or limited under § 309 No. 7 BGB or other mandatory provisions of German consumer protection law.</p>
+
+    <h2>10. Governing Law &amp; Jurisdiction</h2>
+    <p>These Terms are governed by and construed in accordance with the laws of the Federal Republic of Germany, excluding its conflict-of-law rules. If you are a consumer resident in the European Union, you also benefit from any mandatory protective provisions of the law of your country of habitual residence that cannot be derogated from by agreement. Subject to those mandatory consumer protection rules, any disputes arising out of or in connection with these Terms shall be subject to the exclusive jurisdiction of the courts of Stuttgart, Germany. The European Commission provides an online dispute resolution platform at ec.europa.eu/consumers/odr, which you may use to submit a complaint.</p>
+
+    <h2>11. Changes to Terms</h2>
+    <p>We may update these Terms periodically to reflect changes in our services, legal requirements, or business practices. We will notify you of material changes via push notification and/or to the email address associated with your account at least 14 days before the changes take effect. Your continued use of the App after the effective date of revised Terms constitutes your acceptance of those changes. If you do not agree to the revised Terms, you must stop using the App and may delete your account as described above.</p>
+
+  </div>
+
+  <div class="contact">
+    <p class="contact-label">Questions About Terms?</p>
+    <a href="mailto:about@sync.io" class="contact-email">about@sync.io</a>
+  </div>
+
+</div>
+</body>
+</html>

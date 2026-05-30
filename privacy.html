@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy Policy — Sync</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #0A0A0F;
+    color: rgba(255,255,255,0.65);
+    font-size: 14px;
+    line-height: 1.7;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Ambient glows */
+  body::before, body::after {
+    content: '';
+    position: fixed;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+  }
+  body::before {
+    width: 500px; height: 500px;
+    top: -120px; left: -120px;
+    background: radial-gradient(circle, rgba(27,138,143,0.18) 0%, transparent 70%);
+  }
+  body::after {
+    width: 440px; height: 440px;
+    top: -80px; right: -100px;
+    background: radial-gradient(circle, rgba(212,107,158,0.10) 0%, transparent 70%);
+  }
+
+  .wrapper {
+    position: relative;
+    z-index: 1;
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 48px 20px 80px;
+  }
+
+  /* Navigation */
+  .nav {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .nav-logo {
+    font-weight: 800;
+    font-size: 22px;
+    color: #fff;
+    letter-spacing: -0.5px;
+    text-decoration: none;
+  }
+  .nav-divider {
+    width: 1px;
+    height: 18px;
+    background: rgba(255,255,255,0.15);
+  }
+  .nav-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.4);
+  }
+  .nav-links {
+    margin-left: auto;
+    display: flex;
+    gap: 16px;
+  }
+  .nav-links a {
+    font-size: 12px;
+    color: rgba(255,255,255,0.35);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: #5DD8DE; }
+
+  /* Hero */
+  h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.3px;
+    margin-bottom: 6px;
+  }
+  .last-updated {
+    font-size: 12px;
+    color: rgba(255,255,255,0.3);
+    margin-bottom: 32px;
+  }
+
+  /* Glass card */
+  .card {
+    background: rgba(255,255,255,0.06);
+    border: 0.5px solid rgba(255,255,255,0.10);
+    border-radius: 16px;
+    padding: 28px 24px;
+    margin-bottom: 16px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  /* Sections */
+  h2 {
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+    margin-top: 24px;
+    margin-bottom: 8px;
+  }
+  h2:first-child { margin-top: 0; }
+
+  p { margin-bottom: 10px; }
+  p:last-child { margin-bottom: 0; }
+
+  strong {
+    color: #fff;
+    font-weight: 600;
+  }
+
+  ul {
+    list-style: none;
+    padding-left: 0;
+    margin: 8px 0 10px;
+  }
+  ul li {
+    position: relative;
+    padding-left: 16px;
+    margin-bottom: 4px;
+  }
+  ul li::before {
+    content: '·';
+    position: absolute;
+    left: 0;
+    color: rgba(255,255,255,0.4);
+    font-size: 18px;
+    line-height: 1.5;
+  }
+
+  /* Teal highlight box */
+  .teal-box {
+    background: rgba(27,138,143,0.10);
+    border: 0.5px solid rgba(27,138,143,0.22);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin: 10px 0;
+    color: rgba(93,216,222,0.85);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  /* Contact block */
+  .contact {
+    background: rgba(255,255,255,0.04);
+    border: 0.5px solid rgba(255,255,255,0.10);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-top: 4px;
+  }
+  .contact-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 4px;
+  }
+  .contact-email {
+    font-size: 14px;
+    font-weight: 600;
+    color: #5DD8DE;
+    text-decoration: none;
+  }
+  .contact-email:hover { text-decoration: underline; }
+
+  @media (max-width: 520px) {
+    .wrapper { padding: 32px 16px 60px; }
+    h1 { font-size: 24px; }
+    .card { padding: 20px 16px; }
+    .nav-links { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <nav class="nav">
+    <a href="index.html" class="nav-logo">Sync</a>
+    <div class="nav-divider"></div>
+    <span class="nav-label">Legal</span>
+    <div class="nav-links">
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
+    </div>
+  </nav>
+
+  <h1>Privacy Policy</h1>
+  <p class="last-updated">Last updated: May 2026</p>
+
+  <div class="card">
+
+    <h2>1. Data Controller</h2>
+    <p>Aida Valiyeva ("we," "us," or "our") is the data controller for personal data processed through the Sync app ("App") within the meaning of the General Data Protection Regulation (GDPR) and the German Federal Data Protection Act (Bundesdatenschutzgesetz, BDSG). For any privacy-related requests, including the exercise of your data subject rights, contact us at <a href="mailto:privacy@sync.io" class="contact-email">privacy@sync.io</a>.</p>
+
+    <h2>2. Data We Collect</h2>
+    <p><strong>Account Data:</strong> Your email address and a cryptographic hash of your password. Your password is never stored in plain text.</p>
+    <p><strong>Profile Data:</strong> Your full name, username, profile photo, age, city, country, field of study, university, interests, current projects, and optional LinkedIn URL.</p>
+    <p><strong>Usage Data:</strong> Connection requests sent and received, message content and timestamps, match interactions, and notification preferences stored locally and in our database.</p>
+    <p><strong>Device Data:</strong> Your Expo push notification token (used solely to deliver notifications you have opted into) and basic device metadata — device type and operating system version — collected exclusively for crash reporting and service stability.</p>
+
+    <h2>3. How We Use Your Data</h2>
+    <p>We process your personal data for the following purposes:</p>
+    <ul>
+      <li>To create and manage your account and provide the core matching and messaging features of the App</li>
+      <li>To deliver push notifications to which you have opted in</li>
+      <li>To enable optional student verification where you choose to participate</li>
+      <li>To improve match quality using aggregated, anonymised data that cannot identify individual users</li>
+      <li>To comply with our legal obligations, including applicable tax, audit, and data protection law</li>
+    </ul>
+
+    <h2>4. Legal Basis (GDPR — EU/EEA Users)</h2>
+    <p>For EU/EEA users, we rely on the following legal bases under Article 6 GDPR: <strong>Contract (Art. 6(1)(b))</strong> — processing necessary to perform the agreement when you create an account and use the App. <strong>Legitimate Interests (Art. 6(1)(f))</strong> — to improve the App and prevent fraud, where our interests are not overridden by your fundamental rights. <strong>Consent (Art. 6(1)(a))</strong> — for optional push notifications, which you may withdraw at any time via Settings → Notifications.</p>
+
+    <h2>5. Data Storage &amp; Security</h2>
+    <p>Your data is stored in a PostgreSQL database hosted by Supabase on AWS infrastructure (EU region where available). All data transmitted between the App and our servers is encrypted using TLS 1.3. Data at rest is encrypted using AES-256. Profile photos are stored in Supabase Storage with server-side encryption and authenticated access controls that prevent unauthorised access. We conduct regular security reviews and apply the principle of least privilege to all internal data access.</p>
+
+    <h2>6. Data Sharing</h2>
+    <p>We do <strong>not sell</strong> your personal data. We share data only with the following sub-processors, each bound by a Data Processing Agreement (DPA) consistent with GDPR Article 28:</p>
+    <ul>
+      <li><strong>Supabase (Supabase Inc.)</strong> — database hosting, file storage, and authentication infrastructure.</li>
+      <li><strong>Expo (Expo Inc.)</strong> — push notification delivery. Only your push token and notification payload are transmitted.</li>
+      <li><strong>Apple Inc.</strong> — App Store distribution and, if used, Sign in with Apple authentication.</li>
+      <li><strong>Google LLC</strong> — Google Sign-In, only if you choose to authenticate via Google.</li>
+      <li>Law enforcement or regulatory authorities, where we are required to disclose data by a valid legal process, court order, or statutory obligation.</li>
+    </ul>
+
+    <h2>7. Your Rights</h2>
+    <div class="teal-box">
+      You can access, correct, export, or delete your personal data at any time via Settings → Delete account, or by emailing <a href="mailto:privacy@sync.io" class="contact-email">privacy@sync.io</a>. We will respond to all valid requests within 30 days as required by GDPR Article 12.
+    </div>
+    <p>EU/EEA residents have additional rights under GDPR: the right to restrict processing (Art. 18), the right to data portability (Art. 20), and the right to object to processing based on legitimate interests (Art. 21). You have the right to lodge a complaint with your national supervisory authority — in Germany, the <strong>Landesbeauftragte für den Datenschutz und die Informationsfreiheit Baden-Württemberg (LfDI BW)</strong>. California residents have rights under the CCPA, including the right to know, delete, and opt out of sale of personal information; we do not sell personal information.</p>
+
+    <h2>8. Data Retention</h2>
+    <p>Your account and profile data is retained for as long as your account remains active. When you delete your account, your profile data and message history are permanently deleted from our active database within 30 days. Encrypted database backups are purged within 30 days of account deletion. Certain records may be retained for a longer period where required by applicable law, such as statutory accounting or tax retention obligations under German commercial law (§ 257 HGB, § 147 AO).</p>
+
+    <h2>9. Children's Privacy</h2>
+    <p>The App is not directed at children under the age of 16. We do not knowingly collect personal data from users under 16. If we become aware that a user under 16 has provided personal data without verifiable parental or guardian consent, we will delete that data and terminate the account immediately. If you believe a minor has registered on the App, please notify us at <a href="mailto:privacy@sync.io" class="contact-email">privacy@sync.io</a>.</p>
+
+    <h2>10. Advertising &amp; Tracking</h2>
+    <p>Sync does not use advertising SDKs, behavioural tracking technologies, third-party analytics trackers, or cookies for marketing or profiling purposes. We do not share your data with advertising networks, data brokers, or any third party for commercial targeting. Basic crash and error reporting uses only anonymised device metadata as described in Section 2 and is not linked to your identity.</p>
+
+    <h2>11. International Transfers</h2>
+    <p>Your personal data may be processed in the United States, where Supabase and Expo maintain infrastructure. For transfers of personal data from the EU/EEA to third countries, we rely on Standard Contractual Clauses (SCCs) as approved by the European Commission under Article 46(2)(c) GDPR, incorporated into our Data Processing Agreements with each provider. You may request a copy of the applicable transfer safeguards by contacting <a href="mailto:privacy@sync.io" class="contact-email">privacy@sync.io</a>.</p>
+
+    <h2>12. Changes to This Policy</h2>
+    <p>We will notify you of any material changes to this Privacy Policy via in-app notification and/or to the email address associated with your account at least 14 days before the changes take effect. We encourage you to review this Policy periodically. Your continued use of the App after the effective date of a revised Policy constitutes your acceptance of the changes. If you do not agree to the revised Policy, you must stop using the App and may delete your account as described in Section 7.</p>
+
+  </div>
+
+  <div class="contact">
+    <p class="contact-label">Privacy Requests &amp; Data Protection Contact</p>
+    <a href="mailto:privacy@sync.io" class="contact-email">privacy@sync.io</a>
+  </div>
+
+</div>
+</body>
+</html>

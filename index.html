@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sync — Legal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #0A0A0F;
+    color: rgba(255,255,255,0.65);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  body::before, body::after {
+    content: '';
+    position: fixed;
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  body::before {
+    width: 500px; height: 500px;
+    top: -120px; left: -120px;
+    background: radial-gradient(circle, rgba(27,138,143,0.18) 0%, transparent 70%);
+  }
+  body::after {
+    width: 440px; height: 440px;
+    top: -80px; right: -100px;
+    background: radial-gradient(circle, rgba(212,107,158,0.10) 0%, transparent 70%);
+  }
+  .center {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+  }
+  .logo {
+    font-weight: 800;
+    font-size: 38px;
+    color: #fff;
+    letter-spacing: -0.8px;
+    margin-bottom: 6px;
+  }
+  .tagline {
+    font-size: 14px;
+    color: rgba(255,255,255,0.35);
+    margin-bottom: 36px;
+  }
+  .links {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+  }
+  .links a {
+    display: block;
+    padding: 12px 28px;
+    background: rgba(255,255,255,0.06);
+    border: 0.5px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  .links a:hover {
+    background: rgba(255,255,255,0.10);
+    border-color: rgba(255,255,255,0.20);
+  }
+</style>
+</head>
+<body>
+<div class="center">
+  <div class="logo">Sync</div>
+  <p class="tagline">Purposeful Student Networking</p>
+  <div class="links">
+    <a href="privacy.html">Privacy Policy</a>
+    <a href="terms.html">Terms of Service</a>
+  </div>
+</div>
+</body>
+</html>
